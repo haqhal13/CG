@@ -533,10 +533,18 @@ class TelegramNotifier:
         with self._lock:
             self.user_trackers[chat_id] = PositionTracker()
         
+        # Get target wallet - use the global constant (defined at module level)
+        # Access via globals() since we're in the same module
+        target_wallet = globals().get('TARGET_WALLET', '0xeffcc79a8572940cee2238b44eac89f2c48fda88')
+        target_wallet_short = target_wallet[:10] + "..." + target_wallet[-8:] if len(target_wallet) > 18 else target_wallet
+        
         welcome_text = (
             "🤖 Welcome to Polymarket Copy Bot!\n\n"
+            "✅ Bot Activated!\n"
+            "🔍 Scanning targeted account for trades...\n\n"
+            f"📊 Target Wallet: `{target_wallet_short}`\n\n"
             "✨ Your account has been initialized with fresh state!\n"
-            "You'll now receive notifications about trades copied from the target wallet.\n\n"
+            "You'll receive real-time notifications when trades are detected and copied.\n\n"
             "Available commands:\n"
             "/status - Summary of your bot health\n"
             "/openpositions - List your current open positions\n"
@@ -544,7 +552,7 @@ class TelegramNotifier:
             "/pnl - Your realized profit & loss summary\n"
             "/help - Show this help message"
         )
-        await update.message.reply_text(welcome_text)
+        await update.message.reply_text(welcome_text, parse_mode='Markdown')
         logger.info(f"New user started with fresh state: chat_id={chat_id}")
 
     async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
