@@ -58,7 +58,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Standard library + requests for HTTP
@@ -67,9 +67,9 @@ from dotenv import load_dotenv
 
 # Polymarket CLOB client for order placement
 try:
-    from py_clob_client.client import ClobClient
-    from py_clob_client.clob_types import OrderArgs
-    from py_clob_client.order_builder.constants import BUY, SELL
+    from py_clob_client.client import ClobClient  # type: ignore
+    from py_clob_client.clob_types import OrderArgs  # type: ignore
+    from py_clob_client.order_builder.constants import BUY, SELL  # type: ignore
 except ImportError:
     print("ERROR: py-clob-client not installed. Run: pip install py-clob-client")
     sys.exit(1)
@@ -92,6 +92,7 @@ try:
     
     from telegram import Update
     from telegram.ext import Application, CommandHandler, ContextTypes
+    from telegram.ext import JobQueue
 except ImportError:
     print("ERROR: python-telegram-bot not installed. Run: pip install python-telegram-bot")
     sys.exit(1)
@@ -154,15 +155,37 @@ class Trade:
     timestamp: int
     market_id: str           # conditionId or market identifier
     token_id: str            # asset/outcome token ID
-    outcome: str             # Human-readable outcome (e.g., "Yes" or "No")
+    outcome: str             # Human-readable outcome (e.g., "Up" or "Down")
     side: str                # "BUY" or "SELL"
     size: float              # Number of shares
     price: float             # Price per share (0-1 range typically)
     proxy_wallet: str
+    title: str = ""          # Market title (e.g., "Bitcoin Up or Down - December 2, 1PM ET")
+    icon: str = ""           # Icon URL for the coin
 
     def usdc_value(self) -> float:
         """Calculate USDC value of this trade."""
         return self.size * self.price
+    
+    def get_coin_name(self) -> str:
+        """Extract coin name from title (e.g., 'Bitcoin', 'Ethereum', 'Solana')."""
+        if not self.title:
+            return "Unknown"
+        # Extract first word before "Up or Down"
+        parts = self.title.split(" Up or Down")
+        if parts:
+            return parts[0].strip()
+        return "Unknown"
+    
+    def get_price_change_display(self) -> str:
+        """Get price change in cents format (e.g., 'Up 79¢' or 'Down 24¢')."""
+        cents = int(self.price * 100)
+        if self.outcome.upper() == "UP":
+            return f"Up {cents}¢"
+        elif self.outcome.upper() == "DOWN":
+            return f"Down {cents}¢"
+        else:
+            return f"{self.outcome} {cents}¢"
 
     def __str__(self) -> str:
         dt = datetime.fromtimestamp(self.timestamp)
@@ -216,8 +239,10 @@ class BotState:
                 logger.warning(f"Failed to load state: {e}. Starting fresh.")
 
         logger.info("Starting with fresh state")
+        # Look back 1 hour when starting fresh to catch recent trades
+        initial_timestamp = int(time.time()) - (60 * 60)
         return BotState(
-            last_seen_timestamp=int(time.time()),
+            last_seen_timestamp=initial_timestamp,
             seen_transaction_hashes=set(),
             open_positions={},
             closed_positions=[],
@@ -245,17 +270,64 @@ class PositionTracker:
         self,
         open_positions: Optional[Dict[str, Dict]] = None,
         closed_positions: Optional[List[Dict]] = None,
-        realized_pnl: float = 0.0
+        realized_pnl: float = 0.0,
+        trade_history: Optional[List[Dict]] = None
     ) -> None:
         self.open_positions: Dict[str, Dict] = open_positions or {}
         self.closed_positions: List[Dict] = closed_positions or []
         self.realized_pnl: float = realized_pnl
+        self.trade_history: List[Dict] = trade_history or []  # Track all trades for volume calculation
         self._lock = threading.RLock()
+    
+    def save_to_file(self, filepath: Path) -> None:
+        """Save tracker state to JSON file."""
+        try:
+            with self._lock:
+                # Recalculate PnL from closed positions before saving to ensure accuracy
+                recalculated_pnl = sum(float(entry.get("realized_pnl", 0.0)) for entry in self.closed_positions)
+                if abs(recalculated_pnl - self.realized_pnl) > 0.01:
+                    logger.info(f"Correcting PnL before save: {self.realized_pnl:.2f} -> {recalculated_pnl:.2f}")
+                    self.realized_pnl = recalculated_pnl
+                
+                data = {
+                    "open_positions": self.open_positions,
+                    "closed_positions": self.closed_positions,
+                    "realized_pnl": self.realized_pnl,
+                    "trade_history": self.trade_history
+                }
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug(f"User state saved to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to save user state to {filepath}: {e}")
+    
+    @staticmethod
+    def load_from_file(filepath: Path) -> 'PositionTracker':
+        """Load tracker state from JSON file, or create fresh if not found."""
+        if filepath.exists():
+            try:
+                with open(filepath, 'r') as f:
+                    data = json.load(f)
+                tracker = PositionTracker(
+                    open_positions=data.get("open_positions", {}),
+                    closed_positions=data.get("closed_positions", []),
+                    realized_pnl=float(data.get("realized_pnl", 0.0)),
+                    trade_history=data.get("trade_history", [])
+                )
+                logger.info(f"Loaded user state from {filepath}: {len(tracker.open_positions)} open positions, {len(tracker.closed_positions)} closed")
+                return tracker
+            except Exception as e:
+                logger.warning(f"Failed to load user state from {filepath}: {e}. Starting fresh.")
+        
+        return PositionTracker()
 
     def apply_trade(self, trade: Trade, my_size: float) -> List[PositionEvent]:
         """
         Update tracked positions with a newly copied trade.
         Returns list of events describing what changed.
+        
+        In prediction markets, buying opposite outcomes on the same market
+        should be treated as closing/hedging the position.
         """
         if my_size <= 0:
             return []
@@ -266,8 +338,177 @@ class PositionTracker:
 
         events: List[PositionEvent] = []
         timestamp = trade.timestamp or int(time.time())
-
+        
         with self._lock:
+            # Record trade in history for volume tracking
+            trade_record = {
+                "timestamp": timestamp,
+                "transaction_hash": trade.transaction_hash,
+                "market_id": trade.market_id,
+                "outcome": trade.outcome,
+                "side": trade.side,
+                "size": trade.size,
+                "price": trade.price,
+                "usdc_value": trade.usdc_value(),
+                "my_size": my_size,
+                "my_usdc_value": my_size * trade.price,
+                "title": trade.title,
+                "coin_name": trade.get_coin_name()
+            }
+            self.trade_history.append(trade_record)
+            # Keep only last 1000 trades to prevent memory issues
+            if len(self.trade_history) > 1000:
+                self.trade_history = self.trade_history[-1000:]
+            # First, check if we have an opposite position on the same market
+            # In prediction markets, buying opposite outcomes closes the position
+            # BUT: only hedge if we have an open position in the opposite direction
+            opposite_outcome = "Down" if trade.outcome.upper() == "UP" else "Up"
+            opposite_key = None
+            for key, pos in self.open_positions.items():
+                if (pos.get("market_id") == trade.market_id and 
+                    pos.get("outcome") == opposite_outcome):
+                    # Only match if the position is actually open (non-zero size)
+                    pos_size = pos.get("net_size", 0.0)
+                    if abs(pos_size) >= POSITION_EPSILON:
+                        opposite_key = key
+                        break
+            
+            # If we have an opposite position, treat this as closing/hedging
+            if opposite_key:
+                opposite_pos = self.open_positions[opposite_key]
+                opposite_size = opposite_pos.get("net_size", 0.0)
+                
+                # In prediction markets, hedging happens when:
+                # - You have a long position (positive size) in one outcome
+                # - And you BUY the opposite outcome (which creates a long position in the opposite)
+                # This locks in a guaranteed payout
+                #
+                # We only hedge if:
+                # 1. We have a long position (opposite_size > 0) in the opposite outcome
+                # 2. And we're BUYING (trade.side == "BUY") the current outcome
+                # This means we're buying both sides, which hedges the position
+                if trade.side == "BUY" and opposite_size > 0:
+                    # Valid hedge: long position in opposite, buying current outcome
+                    pass  # Continue with hedging
+                else:
+                    # Not a valid hedge - treat as new position
+                    opposite_key = None
+                
+                if opposite_key:
+                    # Calculate closing size
+                    closing_size = min(abs(opposite_size), abs(signed_size))
+                    
+                    # In prediction markets: if you buy Up at $0.60 and Down at $0.40,
+                    # you've locked in a loss of $0.20 per share (the spread)
+                    # PnL = -closing_size * (entry_price + exit_price - 1.0)
+                    # Because: you pay entry + exit, but can only win $1.00
+                    entry_price = opposite_pos.get("avg_entry_price", 0.0)
+                    exit_price = trade.price
+                    
+                    # For prediction markets: when you hedge, you're locking in a guaranteed payout
+                    # If you buy Up at $0.60 and Down at $0.40 for the same size:
+                    # - You paid: $0.60 + $0.40 = $1.00 per share
+                    # - You're guaranteed: $1.00 per share (one will win)
+                    # - Net: $0.00 (break even)
+                    # 
+                    # If prices moved (e.g., Up at $0.60, Down at $0.50):
+                    # - You paid: $0.60 + $0.50 = $1.10 per share
+                    # - You're guaranteed: $1.00 per share
+                    # - Net: -$0.10 per share (loss)
+                    #
+                    # PnL = closing_size * (1.0 - entry_price - exit_price)
+                    # This gives: positive when you profit, negative when you lose
+                    pnl = closing_size * (1.0 - entry_price - exit_price)
+                    self.realized_pnl += pnl
+                    
+                    # Update remaining sizes
+                    # If opposite_size is positive (long), subtract closing_size
+                    # If opposite_size is negative (short), add closing_size
+                    if opposite_size > 0:
+                        remaining_opposite = opposite_size - closing_size
+                    else:
+                        remaining_opposite = opposite_size + closing_size
+                    
+                    # If signed_size is positive (buying), subtract closing_size
+                    # If signed_size is negative (selling), add closing_size
+                    if signed_size > 0:
+                        remaining_new = signed_size - closing_size
+                    else:
+                        remaining_new = signed_size + closing_size
+                    
+                    # Record closed position
+                    closed_entry = {
+                        "token_id": opposite_pos.get("token_id", ""),
+                        "market_id": trade.market_id,
+                        "outcome": f"{opposite_outcome} → {trade.outcome}",
+                        "size": closing_size,
+                        "entry_price": entry_price,
+                        "exit_price": exit_price,
+                        "realized_pnl": pnl,
+                        "closed_at": timestamp,
+                        "type": "HEDGE_CLOSE" if abs(remaining_new) < POSITION_EPSILON else "PARTIAL_HEDGE",
+                        "title": trade.title or opposite_pos.get("title", ""),
+                        "coin_name": trade.get_coin_name() or opposite_pos.get("coin_name", "Unknown")
+                    }
+                    self.closed_positions.append(closed_entry)
+                    if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
+                        self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
+                    
+                    # Update or remove opposite position
+                    if abs(remaining_opposite) < POSITION_EPSILON:
+                        if opposite_key is not None:
+                            self.open_positions.pop(opposite_key, None)
+                    else:
+                        opposite_pos["net_size"] = remaining_opposite
+                        opposite_pos["last_update"] = timestamp
+                    
+                    # Create new position if remaining (but check if one already exists)
+                    if abs(remaining_new) >= POSITION_EPSILON:
+                        # Check if we already have a position for this token_id
+                        existing_new = self.open_positions.get(trade.token_id)
+                        if existing_new:
+                            # Add to existing position
+                            existing_size = existing_new.get("net_size", 0.0)
+                            total_size = existing_size + remaining_new
+                            if abs(total_size) < POSITION_EPSILON:
+                                self.open_positions.pop(trade.token_id, None)
+                            else:
+                                # Recalculate average price
+                                total_abs = abs(existing_size) + abs(remaining_new)
+                                new_avg = (
+                                    abs(existing_size) * existing_new.get("avg_entry_price", 0.0) +
+                                    abs(remaining_new) * trade.price
+                                ) / total_abs
+                                existing_new["net_size"] = total_size
+                                existing_new["avg_entry_price"] = new_avg
+                                existing_new["last_update"] = timestamp
+                        else:
+                            # Create new position
+                            new_position = {
+                                "token_id": trade.token_id,
+                                "market_id": trade.market_id,
+                                "outcome": trade.outcome or "Unknown",
+                                "net_size": remaining_new,
+                                "avg_entry_price": trade.price,
+                                "last_update": timestamp,
+                                "title": trade.title or "",
+                                "coin_name": trade.get_coin_name()
+                            }
+                            self.open_positions[trade.token_id] = new_position
+                    
+                    message = (f"Hedged/Closed {closing_size:.2f} {opposite_outcome} position "
+                              f"by buying {closing_size:.2f} {trade.outcome}. "
+                              f"Realized PnL: ${pnl:.2f}")
+                    
+                    events.append(PositionEvent(
+                        event_type=closed_entry["type"],
+                        message=message,
+                        payload=closed_entry,
+                        realized_pnl=pnl
+                    ))
+                    return events
+            
+            # No opposite position, proceed with normal tracking
             existing = self.open_positions.get(trade.token_id)
 
             # If no existing position, create one
@@ -278,7 +519,9 @@ class PositionTracker:
                     "outcome": trade.outcome or "Unknown",
                     "net_size": signed_size,
                     "avg_entry_price": trade.price,
-                    "last_update": timestamp
+                    "last_update": timestamp,
+                    "title": trade.title or "",
+                    "coin_name": trade.get_coin_name()
                 }
                 self.open_positions[trade.token_id] = new_position
                 direction = "long" if signed_size > 0 else "short"
@@ -331,7 +574,9 @@ class PositionTracker:
                 "exit_price": trade.price,
                 "realized_pnl": pnl,
                 "closed_at": timestamp,
-                "type": close_type
+                "type": close_type,
+                "title": trade.title or existing.get("title", ""),
+                "coin_name": trade.get_coin_name() or existing.get("coin_name", "Unknown")
             }
             self.closed_positions.append(closed_entry)
             if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
@@ -351,7 +596,9 @@ class PositionTracker:
                     "outcome": trade.outcome or "Unknown",
                     "net_size": remaining,
                     "avg_entry_price": trade.price,
-                    "last_update": timestamp
+                    "last_update": timestamp,
+                    "title": trade.title or existing.get("title", ""),
+                    "coin_name": trade.get_coin_name() or existing.get("coin_name", "Unknown")
                 }
                 self.open_positions[trade.token_id] = new_position
                 direction = "long" if remaining > 0 else "short"
@@ -395,8 +642,186 @@ class PositionTracker:
             return [entry.copy() for entry in self.closed_positions]
 
     def total_realized_pnl(self) -> float:
+        """Get total realized PnL. Also recalculate from closed positions to ensure accuracy."""
         with self._lock:
+            # Recalculate from closed positions to ensure accuracy
+            recalculated = sum(float(entry.get("realized_pnl", 0.0)) for entry in self.closed_positions)
+            # Use the stored value, but log if there's a discrepancy
+            if abs(recalculated - self.realized_pnl) > 0.01:
+                logger.warning(f"PnL discrepancy detected: stored={self.realized_pnl:.2f}, recalculated={recalculated:.2f}. Using recalculated value.")
+                self.realized_pnl = recalculated
             return self.realized_pnl
+    
+    def get_hourly_stats(self, start_timestamp: int, end_timestamp: int) -> Dict:
+        """Get statistics for a time period: volume, max trade, peak concurrent exposure, PnL."""
+        with self._lock:
+            # Get trades in the period, sorted by timestamp
+            period_trades = [
+                t for t in self.trade_history
+                if start_timestamp <= t.get("timestamp", 0) < end_timestamp
+            ]
+            period_trades.sort(key=lambda t: t.get("timestamp", 0))
+            
+            # Calculate volume (total USDC value of all trades)
+            volume = sum(float(t.get("my_usdc_value", 0.0)) for t in period_trades)
+            
+            # Find max single trade
+            max_trade = None
+            max_value = 0.0
+            for t in period_trades:
+                value = float(t.get("my_usdc_value", 0.0))
+                if value > max_value:
+                    max_value = value
+                    max_trade = t
+            
+            # Calculate peak concurrent exposure (most money actively being used at once)
+            # We need to simulate the state of open positions over time
+            peak_concurrent_exposure = 0.0
+            
+            # Track open positions as we process trades chronologically
+            # Key: token_id, Value: {"size": float, "avg_price": float, "value": float}
+            active_positions: Dict[str, Dict] = {}
+            
+            # Start with positions that were open at the start of the hour
+            # (positions that were opened before start_timestamp but not closed before it)
+            for entry in self.closed_positions:
+                opened_at = entry.get("opened_at", 0)
+                closed_at = entry.get("closed_at", 0)
+                # If position was opened before hour start and closed during or after hour
+                if opened_at < start_timestamp and closed_at >= start_timestamp:
+                    token_id = entry.get("token_id", "")
+                    if token_id:
+                        size = abs(float(entry.get("entry_size", 0.0)))
+                        avg_price = float(entry.get("entry_price", 0.0))
+                        active_positions[token_id] = {
+                            "size": size,
+                            "avg_price": avg_price,
+                            "value": size * avg_price
+                        }
+            
+            # Also include currently open positions that started before the hour
+            for token_id, pos in self.open_positions.items():
+                opened_at = pos.get("last_update", 0)  # Use last_update as proxy for opened_at
+                if opened_at < start_timestamp:
+                    size = abs(float(pos.get("net_size", 0.0)))
+                    avg_price = float(pos.get("avg_entry_price", 0.0))
+                    active_positions[token_id] = {
+                        "size": size,
+                        "avg_price": avg_price,
+                        "value": size * avg_price
+                    }
+            
+            # Calculate initial concurrent exposure
+            current_exposure = sum(pos["value"] for pos in active_positions.values())
+            peak_concurrent_exposure = max(peak_concurrent_exposure, current_exposure)
+            
+            # Process trades chronologically to track position changes
+            # Use a simplified simulation: track by market_id + outcome (unique position identifier)
+            for trade in period_trades:
+                market_id = trade.get("market_id", "")
+                outcome = trade.get("outcome", "")
+                side = trade.get("side", "")
+                my_size = float(trade.get("my_size", 0.0))
+                price = float(trade.get("price", 0.0))
+                my_value = float(trade.get("my_usdc_value", 0.0))
+                
+                # Create unique key for this position (market + outcome)
+                position_key = f"{market_id}:{outcome}"
+                
+                # Check for opposite position (hedging scenario)
+                opposite_outcome = "Down" if outcome.upper() == "UP" else "Up"
+                opposite_key = f"{market_id}:{opposite_outcome}"
+                
+                if side == "BUY":
+                    # Check if we have an opposite position (hedging)
+                    if opposite_key in active_positions:
+                        # Hedging: reduce or close opposite position
+                        opposite_pos = active_positions[opposite_key]
+                        opposite_size = opposite_pos["size"]
+                        opposite_value = opposite_pos["value"]
+                        
+                        if my_size >= opposite_size:
+                            # Opposite position fully closed by hedging
+                            active_positions.pop(opposite_key, None)
+                            # Remaining size becomes new position
+                            remaining = my_size - opposite_size
+                            if remaining > 0:
+                                remaining_value = remaining * price
+                                active_positions[position_key] = {
+                                    "size": remaining,
+                                    "avg_price": price,
+                                    "value": remaining_value
+                                }
+                        else:
+                            # Partial hedge: reduce opposite position
+                            reduction_ratio = my_size / opposite_size
+                            active_positions[opposite_key]["size"] = opposite_size - my_size
+                            active_positions[opposite_key]["value"] = opposite_value * (1 - reduction_ratio)
+                    else:
+                        # Normal buy: add to or create position
+                        if position_key in active_positions:
+                            # Add to existing position
+                            old_value = active_positions[position_key]["value"]
+                            active_positions[position_key]["size"] += my_size
+                            active_positions[position_key]["value"] = old_value + my_value
+                        else:
+                            # New position
+                            active_positions[position_key] = {
+                                "size": my_size,
+                                "avg_price": price,
+                                "value": my_value
+                            }
+                else:  # SELL
+                    # Reducing position decreases exposure
+                    if position_key in active_positions:
+                        current_size = active_positions[position_key]["size"]
+                        current_value = active_positions[position_key]["value"]
+                        
+                        if my_size >= current_size:
+                            # Position fully closed
+                            active_positions.pop(position_key, None)
+                        else:
+                            # Partial close - reduce proportionally
+                            reduction_ratio = my_size / current_size
+                            active_positions[position_key]["value"] = current_value * (1 - reduction_ratio)
+                            active_positions[position_key]["size"] = current_size - my_size
+                    # If selling without an open position, it doesn't affect exposure
+                
+                # Update current exposure and track peak
+                current_exposure = sum(pos["value"] for pos in active_positions.values())
+                peak_concurrent_exposure = max(peak_concurrent_exposure, current_exposure)
+            
+            # Get PnL for the period
+            pnl = sum(
+                float(entry.get("realized_pnl", 0.0))
+                for entry in self.closed_positions
+                if start_timestamp <= entry.get("closed_at", 0) < end_timestamp
+            )
+            
+            return {
+                "volume": volume,
+                "max_trade": max_trade,
+                "max_value": max_value,
+                "peak_concurrent_exposure": peak_concurrent_exposure,
+                "pnl": pnl,
+                "trade_count": len(period_trades)
+            }
+    
+    def realized_pnl_since(self, start_timestamp: int) -> float:
+        """Calculate realized PnL from closed positions since a specific timestamp."""
+        with self._lock:
+            total = 0.0
+            for entry in self.closed_positions:
+                closed_at = entry.get("closed_at", 0)
+                # Handle both timestamp formats (int or float)
+                if isinstance(closed_at, float):
+                    closed_at = int(closed_at)
+                if closed_at >= start_timestamp:
+                    pnl = entry.get("realized_pnl", 0.0)
+                    # Ensure PnL is a float
+                    if isinstance(pnl, (int, float)):
+                        total += float(pnl)
+            return total
 
 
 class TelegramNotifier:
@@ -407,11 +832,13 @@ class TelegramNotifier:
         self,
         bot_token: str,
         chat_id: str,
-        position_tracker: PositionTracker  # Legacy: kept for backward compatibility but not used
+        position_tracker: PositionTracker,  # Legacy: kept for backward compatibility but not used
+        target_wallet: str = "0xeffcc79a8572940cee2238b44eac89f2c48fda88"
     ) -> None:
         self.bot_token = bot_token.strip()
         self.chat_id_str = chat_id.strip()
         self.enabled = bool(self.bot_token)
+        self.target_wallet = target_wallet
         self.application: Optional[Application] = None
         # Each chat_id gets its own PositionTracker for independent tracking
         self.user_trackers: Dict[int, PositionTracker] = {}
@@ -433,15 +860,38 @@ class TelegramNotifier:
             self.application.add_handler(CommandHandler("openpositions", self._handle_open_positions))
             self.application.add_handler(CommandHandler("closedpositions", self._handle_closed_positions))
             self.application.add_handler(CommandHandler("pnl", self._handle_pnl))
+            self.application.add_handler(CommandHandler("pnltoday", self._handle_pnl_today))
+            self.application.add_handler(CommandHandler("reset", self._handle_reset))
+            self.application.add_handler(CommandHandler("money", self._handle_money))
+            
+            # Schedule hourly summary job
+            # Calculate seconds until next hour
+            now = datetime.now()
+            next_hour = (now.replace(minute=0, second=0, microsecond=0) + 
+                        timedelta(hours=1))
+            seconds_until_next_hour = (next_hour - now).total_seconds()
+            
+            # Schedule recurring job to run at the start of each hour
+            job_queue = self.application.job_queue
+            if job_queue:
+                # Run first summary after current hour ends
+                job_queue.run_repeating(
+                    self._send_hourly_summary,
+                    interval=3600,  # Every hour (3600 seconds)
+                    first=seconds_until_next_hour,
+                    name="hourly_summary"
+                )
+                logger.info(f"Scheduled hourly summaries. First summary in {int(seconds_until_next_hour)}s")
             
             # Start polling in background thread
             def start_polling():
                 try:
-                    self.application.run_polling(
-                        allowed_updates=Update.ALL_TYPES,
-                        drop_pending_updates=True,
-                        stop_signals=None  # Don't handle signals in thread
-                    )
+                    if self.application is not None:
+                        self.application.run_polling(
+                            allowed_updates=Update.ALL_TYPES,
+                            drop_pending_updates=True,
+                            stop_signals=None  # Don't handle signals in thread
+                        )
                 except Exception as e:
                     logger.error(f"Error in Telegram polling thread: {e}")
             
@@ -455,16 +905,38 @@ class TelegramNotifier:
 
     def stop(self) -> None:
         if self.application:
-            self.application.stop()
-            self.application.shutdown()
+            self.application.stop()  # type: ignore
+            self.application.shutdown()  # type: ignore
 
+    def get_user_state_file(self, chat_id: int) -> Path:
+        """Get the state file path for a specific user."""
+        return Path(f"user_state_{chat_id}.json")
+    
     def get_user_tracker(self, chat_id: int) -> PositionTracker:
-        """Get or create a PositionTracker for a specific user."""
+        """Get or create a PositionTracker for a specific user, loading from file if exists."""
         with self._lock:
             if chat_id not in self.user_trackers:
-                # Create fresh tracker for new user
-                self.user_trackers[chat_id] = PositionTracker()
-                logger.info(f"Created fresh tracker for user chat_id={chat_id}")
+                # Try to load from file, or create fresh
+                state_file = self.get_user_state_file(chat_id)
+                self.user_trackers[chat_id] = PositionTracker.load_from_file(state_file)
+                logger.info(f"Loaded/created tracker for user chat_id={chat_id}")
+            return self.user_trackers[chat_id]
+    
+    def save_user_tracker(self, chat_id: int) -> None:
+        """Save a user's tracker to file."""
+        if chat_id in self.user_trackers:
+            state_file = self.get_user_state_file(chat_id)
+            self.user_trackers[chat_id].save_to_file(state_file)
+    
+    def reset_user_tracker(self, chat_id: int) -> PositionTracker:
+        """Reset a user's tracker to fresh state and save."""
+        with self._lock:
+            self.user_trackers[chat_id] = PositionTracker()
+            state_file = self.get_user_state_file(chat_id)
+            # Delete the state file if it exists
+            if state_file.exists():
+                state_file.unlink()
+            logger.info(f"Reset tracker for user chat_id={chat_id}")
             return self.user_trackers[chat_id]
 
     def notify_events(self, events: List[PositionEvent], chat_id: Optional[int] = None) -> None:
@@ -533,10 +1005,8 @@ class TelegramNotifier:
         with self._lock:
             self.user_trackers[chat_id] = PositionTracker()
         
-        # Get target wallet - use the global constant (defined at module level)
-        # Access via globals() since we're in the same module
-        target_wallet = globals().get('TARGET_WALLET', '0xeffcc79a8572940cee2238b44eac89f2c48fda88')
-        target_wallet_short = target_wallet[:10] + "..." + target_wallet[-8:] if len(target_wallet) > 18 else target_wallet
+        # Get target wallet from instance variable
+        target_wallet_short = self.target_wallet[:10] + "..." + self.target_wallet[-8:] if len(self.target_wallet) > 18 else self.target_wallet
         
         welcome_text = (
             "🤖 Welcome to Polymarket Copy Bot!\n\n"
@@ -549,10 +1019,14 @@ class TelegramNotifier:
             "/status - Summary of your bot health\n"
             "/openpositions - List your current open positions\n"
             "/closedpositions - Your recent closed trades with PnL\n"
-            "/pnl - Your realized profit & loss summary\n"
+            "/pnl - PnL for current hour (since 1pm, 2pm, etc.)\n"
+            "/pnltoday - PnL for today (since 12:00 AM)\n"
+            "/money - Volume and max trade for current hour\n"
+            "/backfill - Reset & backfill most recent completed hour\n"
             "/help - Show this help message"
         )
-        await update.message.reply_text(welcome_text, parse_mode='Markdown')
+        if update.message:
+            await update.message.reply_text(welcome_text, parse_mode='Markdown')
         logger.info(f"New user started with fresh state: chat_id={chat_id}")
 
     async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -566,9 +1040,13 @@ class TelegramNotifier:
             "/status - Summary of bot health\n"
             "/openpositions - List current open positions\n"
             "/closedpositions - Recent closed trades with PnL\n"
-            "/pnl - Realized profit & loss summary"
+            "/pnl - PnL for current hour (since 1pm, 2pm, etc.)\n"
+            "/pnltoday - PnL for today (since 12:00 AM)\n"
+            "/money - Volume and max trade for current hour\n"
+            "/reset - Reset all your positions and trades"
         )
-        await update.message.reply_text(help_text)
+        if update.message:
+            await update.message.reply_text(help_text)
 
     async def _handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /status command - show user's own status."""
@@ -591,7 +1069,8 @@ class TelegramNotifier:
                 f"Last closed: {lc.get('outcome')} {lc.get('type')} "
                 f"PnL ${lc.get('realized_pnl', 0.0):.2f}"
             )
-        await update.message.reply_text("\n".join(status_lines))
+        if update.message:
+            await update.message.reply_text("\n".join(status_lines))
 
     async def _handle_open_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /openpositions command - show user's own positions."""
@@ -602,16 +1081,36 @@ class TelegramNotifier:
         tracker = self.get_user_tracker(chat_id)
         positions = tracker.snapshot_open_positions()
         if not positions:
-            await update.message.reply_text("No open positions.")
+            if update.message:
+                await update.message.reply_text("📭 No open positions.")
             return
-        lines = ["📈 Your Open Positions:"]
+        
+        lines = ["📈 Your Open Positions:\n"]
+        total_value = 0.0
         for pos in positions:
-            direction = "Long" if pos["net_size"] > 0 else "Short"
-            lines.append(
-                f"{pos['market_id']} ({pos['outcome']}): {direction} "
-                f"{abs(pos['net_size']):.2f} @ ${pos['avg_entry_price']:.4f}"
-            )
-        await update.message.reply_text("\n".join(lines))
+            coin = pos.get("coin_name", "Unknown")
+            outcome = pos.get("outcome", "Unknown")
+            title = pos.get("title", "")
+            size = abs(pos.get("net_size", 0.0))
+            price = pos.get("avg_entry_price", 0.0)
+            value = size * price
+            total_value += value
+            
+            outcome_emoji = "🟢" if outcome.upper() == "UP" else "🔴"
+            price_cents = int(price * 100)
+            
+            if title:
+                lines.append(f"{outcome_emoji} {coin} {outcome} {price_cents}¢")
+                lines.append(f"   {title}")
+            else:
+                lines.append(f"{outcome_emoji} {coin} {outcome} {price_cents}¢")
+            
+            lines.append(f"   Size: {size:.1f} shares @ ${price:.4f}")
+            lines.append(f"   Value: ${value:.2f}\n")
+        
+        lines.append(f"💰 Total Open Value: ${total_value:.2f}")
+        if update.message:
+            await update.message.reply_text("\n".join(lines))
 
     async def _handle_closed_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /closedpositions command - show user's own closed positions."""
@@ -620,29 +1119,373 @@ class TelegramNotifier:
         chat_id = update.effective_chat.id
         self.active_chats.add(chat_id)
         tracker = self.get_user_tracker(chat_id)
-        closed = tracker.snapshot_closed_positions(limit=5)
+        closed = tracker.snapshot_closed_positions(limit=10)
         if not closed:
-            await update.message.reply_text("No closed trades yet.")
+            if update.message:
+                await update.message.reply_text("📭 No closed trades yet.")
             return
-        lines = ["📉 Your Recent Closed Trades:"]
+        
+        lines = ["📉 Your Recent Closed Trades:\n"]
+        total_pnl = 0.0
         for entry in closed:
             when = datetime.fromtimestamp(entry.get("closed_at", time.time())).strftime("%m-%d %H:%M")
-            lines.append(
-                f"{when} - {entry.get('outcome')} {entry.get('type')} "
-                f"{entry.get('size', 0):.2f} @ ${entry.get('exit_price', 0):.4f} "
-                f"PnL ${entry.get('realized_pnl', 0.0):.2f}"
-            )
-        await update.message.reply_text("\n".join(lines))
+            outcome = entry.get("outcome", "Unknown")
+            close_type = entry.get("type", "CLOSE")
+            size = entry.get("size", 0.0)
+            entry_price = entry.get("entry_price", 0.0)
+            exit_price = entry.get("exit_price", 0.0)
+            pnl = entry.get("realized_pnl", 0.0)
+            total_pnl += pnl
+            
+            pnl_emoji = "✅" if pnl >= 0 else "❌"
+            pnl_sign = "+" if pnl >= 0 else ""
+            
+            lines.append(f"{when} - {close_type}")
+            lines.append(f"   {outcome}")
+            lines.append(f"   {size:.1f} shares: ${entry_price:.4f} → ${exit_price:.4f}")
+            lines.append(f"   {pnl_emoji} PnL: {pnl_sign}${pnl:.2f}\n")
+        
+        total_emoji = "✅" if total_pnl >= 0 else "❌"
+        total_sign = "+" if total_pnl >= 0 else ""
+        lines.append(f"{total_emoji} Total PnL: {total_sign}${total_pnl:.2f}")
+        if update.message:
+            await update.message.reply_text("\n".join(lines))
 
     async def _handle_pnl(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /pnl command - show user's own PnL."""
+        """Handle /pnl command - show user's PnL for the current hour."""
         if not update.effective_chat:
             return
         chat_id = update.effective_chat.id
         self.active_chats.add(chat_id)
         tracker = self.get_user_tracker(chat_id)
+        
+        # Calculate start of current hour (e.g., if it's 2:30pm, start from 2:00pm)
+        now = datetime.now()
+        hour_start = now.replace(minute=0, second=0, microsecond=0)
+        start_timestamp = int(hour_start.timestamp())
+        
+        # Get PnL for this hour
+        hourly_pnl = tracker.realized_pnl_since(start_timestamp)
+        
+        # Get all-time stats
+        total_pnl = tracker.total_realized_pnl()
+        open_positions = tracker.snapshot_open_positions()
+        closed_count = len(tracker.snapshot_closed_positions(limit=0))
+        
+        # Get closed positions this hour
+        closed_this_hour = []
+        for entry in tracker.snapshot_closed_positions(limit=0):
+            closed_at = entry.get("closed_at", 0)
+            if isinstance(closed_at, float):
+                closed_at = int(closed_at)
+            if closed_at >= start_timestamp:
+                closed_this_hour.append(entry)
+        
+        pnl_emoji = "✅" if hourly_pnl >= 0 else "❌"
+        pnl_sign = "+" if hourly_pnl >= 0 else ""
+        total_emoji = "✅" if total_pnl >= 0 else "❌"
+        total_sign = "+" if total_pnl >= 0 else ""
+        
+        hour_str = hour_start.strftime("%I:%M %p")
+        message = (
+            f"💰 Profit & Loss - Current Hour\n"
+            f"⏰ Since {hour_str}\n\n"
+            f"{pnl_emoji} Hourly PnL: {pnl_sign}${hourly_pnl:.2f}\n"
+            f"📊 Trades This Hour: {len(closed_this_hour)}\n\n"
+            f"{total_emoji} All-Time PnL: {total_sign}${total_pnl:.2f}\n"
+            f"📈 Open Positions: {len(open_positions)}\n"
+            f"📉 Total Closed Trades: {closed_count}"
+        )
+        if update.message:
+            await update.message.reply_text(message)
+    
+    async def _handle_money(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /money command - show volume and max trade for current hour."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        
+        # Calculate current hour period
+        now = datetime.now()
+        hour_start = now.replace(minute=0, second=0, microsecond=0)
+        hour_end = hour_start + timedelta(hours=1)
+        start_timestamp = int(hour_start.timestamp())
+        end_timestamp = int(hour_end.timestamp())
+        
+        # Get hourly stats
+        stats = tracker.get_hourly_stats(start_timestamp, end_timestamp)
+        
+        hour_str = hour_start.strftime("%I:%M %p")
+        message = (
+            f"💰 Trading Activity - Current Hour\n"
+            f"⏰ {hour_str} - {hour_end.strftime('%I:%M %p')}\n\n"
+            f"📊 Volume: ${stats['volume']:.2f}\n"
+            f"📈 Trades: {stats['trade_count']}\n"
+        )
+        
+        if stats['max_trade']:
+            max_t = stats['max_trade']
+            coin = max_t.get("coin_name", "Unknown")
+            outcome = max_t.get("outcome", "Unknown")
+            message += (
+                f"\n🔥 Largest Trade:\n"
+                f"   {coin} {outcome}\n"
+                f"   ${stats['max_value']:.2f} USDC\n"
+                f"   {max_t.get('size', 0):.1f} shares @ ${max_t.get('price', 0):.4f}"
+            )
+        else:
+            message += "\n📭 No trades this hour yet"
+        
+        if update.message:
+            await update.message.reply_text(message)
+    
+    async def _send_hourly_summary(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Send hourly summary to all active users at the end of each hour."""
+        if not self.enabled or not self.application:
+            return
+        
+        # Calculate the hour that just ended
+        now = datetime.now()
+        hour_end = now.replace(minute=0, second=0, microsecond=0)
+        hour_start = hour_end - timedelta(hours=1)
+        start_timestamp = int(hour_start.timestamp())
+        end_timestamp = int(hour_end.timestamp())
+        
+        # Send summary to all active users
+        with self._lock:
+            active_chats_copy = list(self.active_chats)
+        
+        for chat_id in active_chats_copy:
+            try:
+                tracker = self.get_user_tracker(chat_id)
+                stats = tracker.get_hourly_stats(start_timestamp, end_timestamp)
+                
+                if stats['trade_count'] == 0:
+                    # Skip if no trades in this hour
+                    continue
+                
+                pnl_emoji = "✅" if stats['pnl'] >= 0 else "❌"
+                pnl_sign = "+" if stats['pnl'] >= 0 else ""
+                
+                message = (
+                    f"📊 Hourly Summary\n"
+                    f"⏰ {hour_start.strftime('%I:%M %p')} - {hour_end.strftime('%I:%M %p')}\n\n"
+                    f"{pnl_emoji} PnL: {pnl_sign}${stats['pnl']:.2f}\n"
+                    f"💰 Volume: ${stats['volume']:.2f}\n"
+                    f"💎 Peak Concurrent Exposure: ${stats.get('peak_concurrent_exposure', 0.0):.2f}\n"
+                    f"📈 Trades: {stats['trade_count']}\n"
+                )
+                
+                if stats['max_trade']:
+                    max_t = stats['max_trade']
+                    coin = max_t.get("coin_name", "Unknown")
+                    outcome = max_t.get("outcome", "Unknown")
+                    message += (
+                        f"\n🔥 Largest Single Trade:\n"
+                        f"   {coin} {outcome} - ${stats['max_value']:.2f}"
+                    )
+                
+                await self.send_message_async(message, chat_id)
+                logger.info(f"Sent hourly summary to chat_id={chat_id}")
+            except Exception as e:
+                logger.warning(f"Failed to send hourly summary to chat {chat_id}: {e}")
+                self.active_chats.discard(chat_id)
+    
+    async def _handle_backfill(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /backfill command - reset state and simulate copying all trades from the most recent completed hour."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        
+        if update.message:
+            await update.message.reply_text(
+                "🔄 Resetting your state and backfilling most recent completed hour...\n"
+                "⏳ This may take a moment..."
+            )
+        
+        # Reset user's tracker first
+        self.reset_user_tracker(chat_id)
+        
+        # Calculate most recent completed hour
+        # If it's 2:23 PM, we want 1:00 PM - 2:00 PM (the most recent completed hour)
+        now = datetime.now()
+        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+        hour_end = current_hour_start  # End of the completed hour
+        hour_start = hour_end - timedelta(hours=1)  # Start of the completed hour
+        start_timestamp = int(hour_start.timestamp())
+        end_timestamp = int(hour_end.timestamp())
+        
+        if update.message:
+            await update.message.reply_text(
+                f"📥 Fetching trades from most recent completed hour...\n"
+                f"⏰ {hour_start.strftime('%I:%M %p')} - {hour_end.strftime('%I:%M %p')}\n\n"
+                f"⏳ Fetching from Polymarket..."
+            )
+        
+        # Fetch all trades from the completed hour
+        trades = fetch_trades_in_range(TARGET_WALLET, start_timestamp, end_timestamp)
+        
+        if not trades:
+            if update.message:
+                await update.message.reply_text(
+                    f"📭 No trades found in the hour {hour_start.strftime('%I:%M %p')} - {hour_end.strftime('%I:%M %p')}.\n"
+                    "The target wallet may not have traded during this period."
+                )
+            return
+        
+        if update.message:
+            await update.message.reply_text(
+                f"✅ Found {len(trades)} trades!\n"
+                f"🔄 Simulating copy trades (in chronological order)..."
+            )
+        
+        # Get user's tracker (fresh after reset)
+        tracker = self.get_user_tracker(chat_id)
+        
+        # Process each trade in chronological order
+        processed_count = 0
+        skipped_count = 0
+        
+        for trade in trades:
+            # Check if we should copy this trade
+            if not should_copy_trade(trade):
+                skipped_count += 1
+                continue
+            
+            # Calculate our size (using current risk settings)
+            my_size = compute_my_size(trade, RISK_MULTIPLIER, MAX_TRADE_USDC)
+            
+            if my_size <= 0:
+                skipped_count += 1
+                continue
+            
+            # Apply trade to user's tracker (simulate, don't place real orders)
+            position_events = tracker.apply_trade(trade, my_size)
+            
+            # Notify user of position events
+            if position_events:
+                self.notify_events(position_events, chat_id=chat_id)
+            
+            processed_count += 1
+        
+        # Save user state
+        self.save_user_tracker(chat_id)
+        
+        # Get updated stats for the hour
+        stats = tracker.get_hourly_stats(start_timestamp, end_timestamp)
+        pnl_emoji = "✅" if stats['pnl'] >= 0 else "❌"
+        pnl_sign = "+" if stats['pnl'] >= 0 else ""
+        
+        # Send summary
+        message = (
+            f"✅ Backfill Complete!\n\n"
+            f"⏰ Hour: {hour_start.strftime('%I:%M %p')} - {hour_end.strftime('%I:%M %p')}\n\n"
+            f"🔄 State Reset: Yes\n"
+            f"📊 Processed: {processed_count} trades\n"
+            f"⏭️  Skipped: {skipped_count} trades\n\n"
+            f"{pnl_emoji} Hourly PnL: {pnl_sign}${stats['pnl']:.2f}\n"
+            f"💰 Volume: ${stats['volume']:.2f}\n"
+            f"💎 Peak Concurrent Exposure: ${stats.get('peak_concurrent_exposure', 0.0):.2f}\n"
+            f"📈 Total Trades: {stats['trade_count']}\n"
+        )
+        
+        if stats['max_trade']:
+            max_t = stats['max_trade']
+            coin = max_t.get("coin_name", "Unknown")
+            outcome = max_t.get("outcome", "Unknown")
+            message += (
+                f"\n🔥 Largest Single Trade:\n"
+                f"   {coin} {outcome} - ${stats['max_value']:.2f}"
+            )
+        
+        message += (
+            f"\n\n💡 Note: Your state was reset and all trades from the completed hour\n"
+            f"have been simulated. No real orders were placed."
+        )
+        
+        if update.message:
+            await update.message.reply_text(message)
+        
+        logger.info(f"Backfilled {processed_count} trades (hour {hour_start.strftime('%I:%M %p')}-{hour_end.strftime('%I:%M %p')}) for user chat_id={chat_id} after reset")
+    
+    async def _handle_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /reset command - reset user's positions and trades."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        
+        # Get current stats before reset
+        tracker = self.get_user_tracker(chat_id)
+        open_count = len(tracker.snapshot_open_positions())
+        closed_count = len(tracker.snapshot_closed_positions(limit=0))
         pnl = tracker.total_realized_pnl()
-        await update.message.reply_text(f"💰 Your Total Realized PnL: ${pnl:.2f}")
+        
+        # Reset the tracker
+        self.reset_user_tracker(chat_id)
+        
+        message = (
+            "🔄 Reset Complete!\n\n"
+            f"📊 Cleared:\n"
+            f"   • {open_count} open positions\n"
+            f"   • {closed_count} closed trades\n"
+            f"   • ${pnl:.2f} realized PnL\n\n"
+            "✨ Your account has been reset to a fresh state.\n"
+            "All new trades will be tracked from now on."
+        )
+        if update.message:
+            await update.message.reply_text(message)
+    
+    async def _handle_pnl_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /pnltoday command - show user's PnL for today (starting from 12:00 AM)."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        
+        # Calculate start of today (12:00 AM)
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_timestamp = int(today_start.timestamp())
+        
+        # Get PnL for today
+        daily_pnl = tracker.realized_pnl_since(start_timestamp)
+        
+        # Get all-time stats
+        total_pnl = tracker.total_realized_pnl()
+        open_positions = tracker.snapshot_open_positions()
+        closed_count = len(tracker.snapshot_closed_positions(limit=0))
+        
+        # Get closed positions today
+        closed_today = []
+        for entry in tracker.snapshot_closed_positions(limit=0):
+            closed_at = entry.get("closed_at", 0)
+            if isinstance(closed_at, float):
+                closed_at = int(closed_at)
+            if closed_at >= start_timestamp:
+                closed_today.append(entry)
+        
+        pnl_emoji = "✅" if daily_pnl >= 0 else "❌"
+        pnl_sign = "+" if daily_pnl >= 0 else ""
+        total_emoji = "✅" if total_pnl >= 0 else "❌"
+        total_sign = "+" if total_pnl >= 0 else ""
+        
+        today_str = today_start.strftime("%B %d, %Y")
+        message = (
+            f"💰 Profit & Loss - Today\n"
+            f"📅 {today_str} (since 12:00 AM)\n\n"
+            f"{pnl_emoji} Daily PnL: {pnl_sign}${daily_pnl:.2f}\n"
+            f"📊 Trades Today: {len(closed_today)}\n\n"
+            f"{total_emoji} All-Time PnL: {total_sign}${total_pnl:.2f}\n"
+            f"📈 Open Positions: {len(open_positions)}\n"
+            f"📉 Total Closed Trades: {closed_count}"
+        )
+        if update.message:
+            await update.message.reply_text(message)
 
 
 # ============================================================================
@@ -661,6 +1504,106 @@ def get_http_session() -> requests.Session:
             'User-Agent': 'PolymarketCopyBot/1.0'
         })
     return _http_session
+
+
+def fetch_trades_in_range(
+    target_wallet: str,
+    start_timestamp: int,
+    end_timestamp: int
+) -> list[Trade]:
+    """
+    Fetch all trades for the target wallet within a time range.
+    
+    Args:
+        target_wallet: Proxy wallet address to monitor
+        start_timestamp: Unix timestamp to fetch trades from (inclusive)
+        end_timestamp: Unix timestamp to fetch trades until (exclusive)
+    
+    Returns:
+        List of Trade objects sorted by timestamp (oldest first)
+    """
+    endpoint = f"{DATA_API_BASE_URL}/activity"
+    params = {
+        "user": target_wallet.lower(),
+        "type": "TRADE",
+        "sortBy": "TIMESTAMP",
+        "sortDirection": "DESC",
+        "limit": 200  # Fetch more to ensure we get all trades in the hour
+    }
+    
+    session = get_http_session()
+    retry_delay = INITIAL_RETRY_DELAY
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            logger.info(f"Fetching trades from Polymarket API for range {start_timestamp}-{end_timestamp} (attempt {attempt + 1}/{MAX_RETRIES})")
+            response = session.get(endpoint, params=params, timeout=10)
+            
+            if response.status_code == 429:
+                logger.warning(f"Rate limit hit. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, MAX_RETRY_DELAY)
+                continue
+            
+            response.raise_for_status()
+            activities = response.json()
+            logger.info(f"API returned {len(activities)} activities, filtering for trades in range")
+            
+            # Parse trades
+            trades = []
+            for activity in activities:
+                tx_hash = activity.get("transactionHash", "")
+                activity_timestamp = activity.get("timestamp", 0)
+                
+                # Skip if no hash
+                if not tx_hash:
+                    continue
+                
+                # Filter by timestamp range
+                if activity_timestamp < start_timestamp or activity_timestamp >= end_timestamp:
+                    continue
+                
+                try:
+                    proxy_wallet = activity.get("proxyWallet", "").lower()
+                    market_id = activity.get("conditionId", activity.get("title", ""))
+                    
+                    trade = Trade(
+                        transaction_hash=tx_hash,
+                        timestamp=activity_timestamp,
+                        market_id=market_id,
+                        token_id=activity.get("asset", ""),
+                        outcome=activity.get("outcome", ""),
+                        side=activity.get("side", ""),
+                        size=float(activity.get("size", 0)),
+                        price=float(activity.get("price", 0)),
+                        proxy_wallet=proxy_wallet,
+                        title=activity.get("title", ""),
+                        icon=activity.get("icon", "")
+                    )
+                    
+                    if trade.market_id and trade.token_id:
+                        trades.append(trade)
+                    else:
+                        logger.warning(f"Missing market/token ID: {trade}")
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Failed to parse trade activity: {e}")
+                    continue
+            
+            # Sort by timestamp (oldest first) so we process trades in chronological order
+            trades.sort(key=lambda t: t.timestamp)
+            logger.info(f"Found {len(trades)} trades in the specified time range")
+            return trades
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, MAX_RETRY_DELAY)
+            else:
+                logger.error("Max retries reached, giving up")
+                return []
+    
+    return []
 
 
 def fetch_trades_since(
@@ -683,12 +1626,14 @@ def fetch_trades_since(
         List of new Trade objects (not in seen_hashes)
     """
     endpoint = f"{DATA_API_BASE_URL}/activity"
+    # Note: The 'start' parameter doesn't work reliably, so we fetch recent trades
+    # and filter by timestamp in code. Fetch last 100 trades to ensure we don't miss any.
     params = {
         "user": target_wallet.lower(),
         "type": "TRADE",
-        "start": last_timestamp,
         "sortBy": "TIMESTAMP",
-        "sortDirection": "DESC"
+        "sortDirection": "DESC",
+        "limit": 100  # Fetch enough to catch recent activity
     }
 
     session = get_http_session()
@@ -696,7 +1641,7 @@ def fetch_trades_since(
 
     for attempt in range(MAX_RETRIES):
         try:
-            logger.debug(f"Fetching trades (attempt {attempt + 1}/{MAX_RETRIES})")
+            logger.info(f"Fetching trades from Polymarket API (attempt {attempt + 1}/{MAX_RETRIES})")
             response = session.get(endpoint, params=params, timeout=10)
 
             # Handle rate limiting
@@ -708,27 +1653,39 @@ def fetch_trades_since(
 
             response.raise_for_status()
             activities = response.json()
+            logger.info(f"API returned {len(activities)} activities, filtering for trades after timestamp {last_timestamp}")
 
             # Parse trades
             trades = []
             for activity in activities:
                 tx_hash = activity.get("transactionHash", "")
+                activity_timestamp = activity.get("timestamp", 0)
 
                 # Skip duplicates
                 if not tx_hash or tx_hash in seen_hashes:
                     continue
+                
+                # Filter by timestamp - only process trades after last_seen_timestamp
+                if activity_timestamp <= last_timestamp:
+                    continue
 
                 try:
+                    # API returns 'proxyWallet' not 'user', and 'conditionId' not 'market'
+                    proxy_wallet = activity.get("proxyWallet", "").lower()
+                    market_id = activity.get("conditionId", activity.get("title", ""))
+                    
                     trade = Trade(
                         transaction_hash=tx_hash,
-                        timestamp=activity.get("timestamp", 0),
-                        market_id=activity.get("market", ""),
+                        timestamp=activity_timestamp,
+                        market_id=market_id,
                         token_id=activity.get("asset", ""),
                         outcome=activity.get("outcome", ""),
                         side=activity.get("side", ""),
                         size=float(activity.get("size", 0)),
                         price=float(activity.get("price", 0)),
-                        proxy_wallet=activity.get("user", "").lower()
+                        proxy_wallet=proxy_wallet,
+                        title=activity.get("title", ""),
+                        icon=activity.get("icon", "")
                     )
 
                     # Validate wallet match
@@ -926,13 +1883,35 @@ def process_trade(
     # Apply trade to all active Telegram users' trackers
     if notifier.enabled:
         with notifier._lock:
-            active_user_ids = list(notifier.user_trackers.keys())
+            active_user_ids = list(notifier.active_chats)
+        
+        if active_user_ids:
+            # Send trade detection notification to all active users
+            coin_name = trade.get_coin_name()
+            price_change = trade.get_price_change_display()
+            outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
+            
+            trade_notification = (
+                f"🔔 NEW TRADE DETECTED\n\n"
+                f"{outcome_emoji} {coin_name} {price_change}\n"
+                f"📊 {trade.title}\n\n"
+                f"Action: {trade.side}\n"
+                f"Shares: {trade.size:.1f}\n"
+                f"Price: ${trade.price:.4f}\n"
+                f"Value: ${trade.usdc_value():.2f}\n\n"
+                f"📋 Our Copy:\n"
+                f"   {my_size:.1f} shares @ ${trade.price:.4f}\n"
+                f"   Total: ${my_value:.2f} USDC"
+            )
+            notifier.send_message_to_all(trade_notification)
         
         for chat_id in active_user_ids:
             user_tracker = notifier.get_user_tracker(chat_id)
             position_events = user_tracker.apply_trade(trade, my_size)
-            # Send notifications to this specific user
+            # Send position event notifications to this specific user
             notifier.notify_events(position_events, chat_id=chat_id)
+            # Save user state after applying trade
+            notifier.save_user_tracker(chat_id)
             logger.debug(f"Applied trade to user chat_id={chat_id}")
     
     # Also apply to legacy tracker if Telegram is disabled
@@ -1116,7 +2095,8 @@ def main() -> None:
     notifier = TelegramNotifier(
         bot_token=TELEGRAM_BOT_TOKEN,
         chat_id=TELEGRAM_CHAT_ID,
-        position_tracker=position_tracker
+        position_tracker=position_tracker,
+        target_wallet=TARGET_WALLET
     )
 
     # Initialize CLOB client (only if not dry run)
