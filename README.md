@@ -27,6 +27,7 @@ A production-ready Python bot that automatically copies trades from a target wal
 ✅ **Exponential Backoff**: Handles network errors and rate limits gracefully
 ✅ **Dry Run Mode**: Test the bot without placing real orders
 ✅ **Comprehensive Logging**: Detailed logs for debugging and monitoring
+✅ **Telegram Status & Alerts**: Get notifications for copied trades, open positions, and realized profits directly in Telegram
 
 ## Target Wallet
 
@@ -82,6 +83,8 @@ Currently configured to copy trades from:
 | `POLL_INTERVAL_SECONDS` | Polling frequency in seconds | 2.0 |
 | `DRY_RUN` | Test mode (true/false) | false |
 | `LOG_LEVEL` | Logging verbosity (DEBUG/INFO/WARNING/ERROR) | INFO |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts (leave empty to disable) | None |
+| `TELEGRAM_CHAT_ID` | Telegram chat/user ID to notify | None |
 
 ### Risk Management
 
@@ -90,6 +93,23 @@ Currently configured to copy trades from:
   - `1.0` = Copy exact same size as target wallet
   - `0.5` = Use half the size (more conservative)
   - `2.0` = Use double the size (more aggressive)
+
+## Telegram Integration
+
+Stay in sync with the bot even when you are away from your terminal.
+
+1. Create a Telegram bot with [@BotFather](https://t.me/botfather) and copy the token.
+2. Determine the chat ID (personal DM or group) using [@userinfobot](https://t.me/userinfobot) or similar.
+3. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in your `.env`.
+
+Once configured the bot will:
+- Notify you when trades are copied, positions are closed, or profits are realized
+- Track open exposure and closed trades with PnL
+- Respond to the following commands:
+  - `/status` – quick health summary and last closed trade
+  - `/openpositions` – list of active positions
+  - `/closedpositions` – five most recent closed trades
+  - `/pnl` – cumulative realized profit & loss
 
 ## Usage
 

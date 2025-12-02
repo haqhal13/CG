@@ -55,8 +55,9 @@ import sys
 import time
 import json
 import logging
+import threading
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, List
 from datetime import datetime
 from pathlib import Path
 
@@ -71,6 +72,28 @@ try:
     from py_clob_client.order_builder.constants import BUY, SELL
 except ImportError:
     print("ERROR: py-clob-client not installed. Run: pip install py-clob-client")
+    sys.exit(1)
+
+try:
+    # Fix timezone issue before importing Application
+    # Patch tzlocal.get_localzone to return pytz timezone
+    import pytz
+    import tzlocal
+    
+    # Store original function
+    original_get_localzone = tzlocal.get_localzone
+    
+    # Create patched version that returns pytz UTC
+    def patched_get_localzone():
+        return pytz.UTC
+    
+    # Replace the function
+    tzlocal.get_localzone = patched_get_localzone
+    
+    from telegram import Update
+    from telegram.ext import Application, CommandHandler, ContextTypes
+except ImportError:
+    print("ERROR: python-telegram-bot not installed. Run: pip install python-telegram-bot")
     sys.exit(1)
 
 # Load environment variables
@@ -91,6 +114,8 @@ RISK_MULTIPLIER = float(os.getenv("RISK_MULTIPLIER", "1.0"))
 POLL_INTERVAL_SECONDS = float(os.getenv("POLL_INTERVAL_SECONDS", "2.0"))
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() in ("true", "1", "yes")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")  # Optional: for backward compatibility
 
 # State file for persistence
 STATE_FILE = Path("bot_state.json")
@@ -151,13 +176,19 @@ class BotState:
     """Persistent state to prevent duplicate trade processing."""
     last_seen_timestamp: int
     seen_transaction_hashes: set[str]
+    open_positions: Dict[str, Dict]
+    closed_positions: List[Dict]
+    realized_pnl: float
 
     def save(self, filepath: Path) -> None:
         """Save state to JSON file."""
         try:
             data = {
                 "last_seen_timestamp": self.last_seen_timestamp,
-                "seen_transaction_hashes": list(self.seen_transaction_hashes)
+                "seen_transaction_hashes": list(self.seen_transaction_hashes),
+                "open_positions": self.open_positions,
+                "closed_positions": self.closed_positions,
+                "realized_pnl": self.realized_pnl,
             }
             with open(filepath, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -174,7 +205,10 @@ class BotState:
                     data = json.load(f)
                 state = BotState(
                     last_seen_timestamp=data.get("last_seen_timestamp", int(time.time())),
-                    seen_transaction_hashes=set(data.get("seen_transaction_hashes", []))
+                    seen_transaction_hashes=set(data.get("seen_transaction_hashes", [])),
+                    open_positions=data.get("open_positions", {}),
+                    closed_positions=data.get("closed_positions", []),
+                    realized_pnl=float(data.get("realized_pnl", 0.0)),
                 )
                 logger.info(f"Loaded state: {len(state.seen_transaction_hashes)} transactions tracked")
                 return state
@@ -184,8 +218,423 @@ class BotState:
         logger.info("Starting with fresh state")
         return BotState(
             last_seen_timestamp=int(time.time()),
-            seen_transaction_hashes=set()
+            seen_transaction_hashes=set(),
+            open_positions={},
+            closed_positions=[],
+            realized_pnl=0.0
         )
+
+
+POSITION_EPSILON = 1e-6
+MAX_CLOSED_POSITIONS = 200
+
+
+@dataclass
+class PositionEvent:
+    """Represents a position lifecycle event for notifications."""
+    event_type: str
+    message: str
+    payload: Optional[Dict] = None
+    realized_pnl: float = 0.0
+
+
+class PositionTracker:
+    """Tracks open positions, closed trades, and realized PnL."""
+
+    def __init__(
+        self,
+        open_positions: Optional[Dict[str, Dict]] = None,
+        closed_positions: Optional[List[Dict]] = None,
+        realized_pnl: float = 0.0
+    ) -> None:
+        self.open_positions: Dict[str, Dict] = open_positions or {}
+        self.closed_positions: List[Dict] = closed_positions or []
+        self.realized_pnl: float = realized_pnl
+        self._lock = threading.RLock()
+
+    def apply_trade(self, trade: Trade, my_size: float) -> List[PositionEvent]:
+        """
+        Update tracked positions with a newly copied trade.
+        Returns list of events describing what changed.
+        """
+        if my_size <= 0:
+            return []
+
+        signed_size = my_size if trade.side == "BUY" else -my_size
+        if abs(signed_size) < POSITION_EPSILON:
+            return []
+
+        events: List[PositionEvent] = []
+        timestamp = trade.timestamp or int(time.time())
+
+        with self._lock:
+            existing = self.open_positions.get(trade.token_id)
+
+            # If no existing position, create one
+            if not existing or abs(existing.get("net_size", 0.0)) < POSITION_EPSILON:
+                new_position = {
+                    "token_id": trade.token_id,
+                    "market_id": trade.market_id,
+                    "outcome": trade.outcome or "Unknown",
+                    "net_size": signed_size,
+                    "avg_entry_price": trade.price,
+                    "last_update": timestamp
+                }
+                self.open_positions[trade.token_id] = new_position
+                direction = "long" if signed_size > 0 else "short"
+                events.append(PositionEvent(
+                    event_type="OPENED",
+                    message=(f"Opened {direction} {abs(signed_size):.2f} {trade.outcome} "
+                             f"@ ${trade.price:.4f}"),
+                    payload=new_position.copy()
+                ))
+                return events
+
+            current_size = existing["net_size"]
+            # Same direction -> increase
+            if current_size * signed_size > 0:
+                total_abs = abs(current_size) + abs(signed_size)
+                new_avg = (
+                    abs(current_size) * existing["avg_entry_price"] +
+                    abs(signed_size) * trade.price
+                ) / total_abs
+
+                existing["net_size"] = current_size + signed_size
+                existing["avg_entry_price"] = new_avg
+                existing["last_update"] = timestamp
+                direction = "long" if existing["net_size"] > 0 else "short"
+                events.append(PositionEvent(
+                    event_type="INCREASED",
+                    message=(f"Increased {direction} {trade.outcome} to "
+                             f"{abs(existing['net_size']):.2f} @ ${existing['avg_entry_price']:.4f}"),
+                    payload=existing.copy()
+                ))
+                return events
+
+            # Opposite direction -> closing/reversing
+            closing_size = min(abs(current_size), abs(signed_size))
+            pnl = closing_size * (trade.price - existing["avg_entry_price"]) * (
+                1 if current_size > 0 else -1
+            )
+            self.realized_pnl += pnl
+
+            remaining = current_size + signed_size
+            close_type = "FULL_CLOSE" if abs(remaining) < POSITION_EPSILON else "PARTIAL_CLOSE"
+            direction = "long" if current_size > 0 else "short"
+
+            closed_entry = {
+                "token_id": trade.token_id,
+                "market_id": trade.market_id,
+                "outcome": trade.outcome or "Unknown",
+                "size": closing_size,
+                "entry_price": existing["avg_entry_price"],
+                "exit_price": trade.price,
+                "realized_pnl": pnl,
+                "closed_at": timestamp,
+                "type": close_type
+            }
+            self.closed_positions.append(closed_entry)
+            if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
+                self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
+
+            message = (f"Closed {closing_size:.2f} {direction} {trade.outcome} "
+                       f"@ ${trade.price:.4f}. Realized PnL: ${pnl:.2f}.")
+
+            if abs(remaining) < POSITION_EPSILON:
+                message += " Position fully closed."
+                self.open_positions.pop(trade.token_id, None)
+            elif (remaining > 0 and current_size < 0) or (remaining < 0 and current_size > 0):
+                # Position flipped to opposite direction
+                new_position = {
+                    "token_id": trade.token_id,
+                    "market_id": trade.market_id,
+                    "outcome": trade.outcome or "Unknown",
+                    "net_size": remaining,
+                    "avg_entry_price": trade.price,
+                    "last_update": timestamp
+                }
+                self.open_positions[trade.token_id] = new_position
+                direction = "long" if remaining > 0 else "short"
+                message += (f" Reversed to {direction} {abs(remaining):.2f} "
+                            f"@ ${trade.price:.4f}.")
+            else:
+                existing["net_size"] = remaining
+                existing["last_update"] = timestamp
+                direction = "long" if remaining > 0 else "short"
+                message += (f" Remaining {direction} size: "
+                            f"{abs(remaining):.2f} @ ${existing['avg_entry_price']:.4f}.")
+
+            events.append(PositionEvent(
+                event_type=close_type,
+                message=message,
+                payload=closed_entry,
+                realized_pnl=pnl
+            ))
+            return events
+
+    def snapshot_open_positions(self) -> List[Dict]:
+        """Return a copy of current open positions."""
+        with self._lock:
+            return [pos.copy() for pos in self.open_positions.values()]
+
+    def snapshot_closed_positions(self, limit: int = 5) -> List[Dict]:
+        """Return the most recent closed position records."""
+        with self._lock:
+            if limit <= 0:
+                return [entry.copy() for entry in self.closed_positions]
+            return [entry.copy() for entry in self.closed_positions[-limit:]]
+
+    def serialize_open_positions(self) -> Dict[str, Dict]:
+        """Return snapshot formatted for persistence."""
+        with self._lock:
+            return {token_id: pos.copy() for token_id, pos in self.open_positions.items()}
+
+    def serialize_closed_positions(self) -> List[Dict]:
+        """Return closed position log for persistence."""
+        with self._lock:
+            return [entry.copy() for entry in self.closed_positions]
+
+    def total_realized_pnl(self) -> float:
+        with self._lock:
+            return self.realized_pnl
+
+
+class TelegramNotifier:
+    """Sends Telegram notifications and responds to status commands.
+    Each user gets their own fresh state when they press /start."""
+
+    def __init__(
+        self,
+        bot_token: str,
+        chat_id: str,
+        position_tracker: PositionTracker  # Legacy: kept for backward compatibility but not used
+    ) -> None:
+        self.bot_token = bot_token.strip()
+        self.chat_id_str = chat_id.strip()
+        self.enabled = bool(self.bot_token)
+        self.application: Optional[Application] = None
+        # Each chat_id gets its own PositionTracker for independent tracking
+        self.user_trackers: Dict[int, PositionTracker] = {}
+        self.active_chats: set[int] = set()  # Track chats that have used /start
+        self._lock = threading.RLock()  # Lock for thread-safe access to user_trackers
+
+        if not self.enabled:
+            logger.info("Telegram integration disabled (set TELEGRAM_BOT_TOKEN to enable).")
+            return
+
+        try:
+            # Build Application (timezone is already patched at module level)
+            self.application = Application.builder().token(self.bot_token).build()
+            
+            # Add handlers
+            self.application.add_handler(CommandHandler("start", self._handle_start))
+            self.application.add_handler(CommandHandler("help", self._handle_help))
+            self.application.add_handler(CommandHandler("status", self._handle_status))
+            self.application.add_handler(CommandHandler("openpositions", self._handle_open_positions))
+            self.application.add_handler(CommandHandler("closedpositions", self._handle_closed_positions))
+            self.application.add_handler(CommandHandler("pnl", self._handle_pnl))
+            
+            # Start polling in background thread
+            def start_polling():
+                try:
+                    self.application.run_polling(
+                        allowed_updates=Update.ALL_TYPES,
+                        drop_pending_updates=True,
+                        stop_signals=None  # Don't handle signals in thread
+                    )
+                except Exception as e:
+                    logger.error(f"Error in Telegram polling thread: {e}")
+            
+            polling_thread = threading.Thread(target=start_polling, daemon=True)
+            polling_thread.start()
+            logger.info("Telegram bot polling started. Each user gets fresh state on /start.")
+        except Exception as exc:
+            logger.error(f"Failed to initialize Telegram bot: {exc}", exc_info=True)
+            self.enabled = False
+            return
+
+    def stop(self) -> None:
+        if self.application:
+            self.application.stop()
+            self.application.shutdown()
+
+    def get_user_tracker(self, chat_id: int) -> PositionTracker:
+        """Get or create a PositionTracker for a specific user."""
+        with self._lock:
+            if chat_id not in self.user_trackers:
+                # Create fresh tracker for new user
+                self.user_trackers[chat_id] = PositionTracker()
+                logger.info(f"Created fresh tracker for user chat_id={chat_id}")
+            return self.user_trackers[chat_id]
+
+    def notify_events(self, events: List[PositionEvent], chat_id: Optional[int] = None) -> None:
+        """Send notifications to a specific user or all active users.
+        If chat_id is provided, only send to that user. Otherwise send to all active users."""
+        if chat_id is not None:
+            # Send to specific user
+            for event in events:
+                self.send_message(event.message, chat_id=chat_id)
+        else:
+            # Send to all active users
+            for event in events:
+                self.send_message_to_all(event.message)
+
+    async def send_message_async(self, text: str, chat_id: int) -> None:
+        """Send message to a specific chat (async)."""
+        if not self.enabled or not self.application:
+            return
+        try:
+            await self.application.bot.send_message(chat_id=chat_id, text=text)
+        except Exception as exc:
+            logger.error(f"Failed to send Telegram message: {exc}")
+
+    def send_message(self, text: str, chat_id: Optional[int] = None) -> None:
+        """Send message to a specific chat or default chat if specified (sync wrapper)."""
+        if not self.enabled or not self.application:
+            return
+        target_chat = chat_id or (int(self.chat_id_str) if self.chat_id_str else None)
+        if target_chat is None:
+            return
+        # Run async function in thread
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.send_message_async(text, target_chat))
+
+    def send_message_to_all(self, text: str) -> None:
+        """Send message to all active chats that have used /start."""
+        if not self.enabled or not self.application:
+            return
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        for chat_id in self.active_chats.copy():  # Use copy to avoid modification during iteration
+            try:
+                loop.run_until_complete(self.send_message_async(text, chat_id))
+            except Exception as exc:
+                logger.warning(f"Failed to send message to chat {chat_id}: {exc}")
+                # Remove chat if it's no longer valid (user blocked bot, etc.)
+                self.active_chats.discard(chat_id)
+
+    async def _handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /start command - create fresh state for user and show welcome message."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        
+        # Create fresh tracker for this user (resets their state)
+        with self._lock:
+            self.user_trackers[chat_id] = PositionTracker()
+        
+        welcome_text = (
+            "🤖 Welcome to Polymarket Copy Bot!\n\n"
+            "✨ Your account has been initialized with fresh state!\n"
+            "You'll now receive notifications about trades copied from the target wallet.\n\n"
+            "Available commands:\n"
+            "/status - Summary of your bot health\n"
+            "/openpositions - List your current open positions\n"
+            "/closedpositions - Your recent closed trades with PnL\n"
+            "/pnl - Your realized profit & loss summary\n"
+            "/help - Show this help message"
+        )
+        await update.message.reply_text(welcome_text)
+        logger.info(f"New user started with fresh state: chat_id={chat_id}")
+
+    async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /help command."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)  # Register on any command
+        help_text = (
+            "Polymarket Copy Bot Commands:\n"
+            "/status - Summary of bot health\n"
+            "/openpositions - List current open positions\n"
+            "/closedpositions - Recent closed trades with PnL\n"
+            "/pnl - Realized profit & loss summary"
+        )
+        await update.message.reply_text(help_text)
+
+    async def _handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /status command - show user's own status."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        open_positions = tracker.snapshot_open_positions()
+        last_closed = tracker.snapshot_closed_positions(limit=1)
+        pnl = tracker.total_realized_pnl()
+        status_lines = [
+            f"📊 Your Status:",
+            f"Open positions: {len(open_positions)}",
+            f"Realized PnL: ${pnl:.2f}"
+        ]
+        if last_closed:
+            lc = last_closed[-1]
+            status_lines.append(
+                f"Last closed: {lc.get('outcome')} {lc.get('type')} "
+                f"PnL ${lc.get('realized_pnl', 0.0):.2f}"
+            )
+        await update.message.reply_text("\n".join(status_lines))
+
+    async def _handle_open_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /openpositions command - show user's own positions."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        positions = tracker.snapshot_open_positions()
+        if not positions:
+            await update.message.reply_text("No open positions.")
+            return
+        lines = ["📈 Your Open Positions:"]
+        for pos in positions:
+            direction = "Long" if pos["net_size"] > 0 else "Short"
+            lines.append(
+                f"{pos['market_id']} ({pos['outcome']}): {direction} "
+                f"{abs(pos['net_size']):.2f} @ ${pos['avg_entry_price']:.4f}"
+            )
+        await update.message.reply_text("\n".join(lines))
+
+    async def _handle_closed_positions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /closedpositions command - show user's own closed positions."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        closed = tracker.snapshot_closed_positions(limit=5)
+        if not closed:
+            await update.message.reply_text("No closed trades yet.")
+            return
+        lines = ["📉 Your Recent Closed Trades:"]
+        for entry in closed:
+            when = datetime.fromtimestamp(entry.get("closed_at", time.time())).strftime("%m-%d %H:%M")
+            lines.append(
+                f"{when} - {entry.get('outcome')} {entry.get('type')} "
+                f"{entry.get('size', 0):.2f} @ ${entry.get('exit_price', 0):.4f} "
+                f"PnL ${entry.get('realized_pnl', 0.0):.2f}"
+            )
+        await update.message.reply_text("\n".join(lines))
+
+    async def _handle_pnl(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /pnl command - show user's own PnL."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        pnl = tracker.total_realized_pnl()
+        await update.message.reply_text(f"💰 Your Total Realized PnL: ${pnl:.2f}")
 
 
 # ============================================================================
@@ -423,10 +872,13 @@ def process_trade(
     clob_client: Optional[ClobClient],
     risk_multiplier: float,
     max_usdc: float,
-    dry_run: bool
+    dry_run: bool,
+    position_tracker: PositionTracker,  # Legacy: kept for backward compatibility
+    notifier: TelegramNotifier
 ) -> None:
     """
     Process a single detected trade: validate, size, and place copy order.
+    Applies the trade to all active Telegram users' trackers.
 
     Args:
         trade: The Trade to process
@@ -434,6 +886,8 @@ def process_trade(
         risk_multiplier: Risk multiplier for sizing
         max_usdc: Max USDC per trade
         dry_run: If True, don't place real orders
+        position_tracker: Legacy tracker (not used when Telegram is enabled)
+        notifier: Telegram notifier instance (manages per-user trackers)
     """
     logger.info("=" * 60)
     logger.info(f"🔔 NEW TRADE DETECTED")
@@ -457,12 +911,33 @@ def process_trade(
     logger.info(f"Our copy: {my_size:.2f} shares (${my_value:.2f} USDC, "
                f"{risk_multiplier}x multiplier)")
 
-    # Dry run mode
+    if my_size <= 0:
+        logger.warning("Computed trade size is zero after risk controls; skipping.")
+        return
+
+    # Apply trade to all active Telegram users' trackers
+    if notifier.enabled:
+        with notifier._lock:
+            active_user_ids = list(notifier.user_trackers.keys())
+        
+        for chat_id in active_user_ids:
+            user_tracker = notifier.get_user_tracker(chat_id)
+            position_events = user_tracker.apply_trade(trade, my_size)
+            # Send notifications to this specific user
+            notifier.notify_events(position_events, chat_id=chat_id)
+            logger.debug(f"Applied trade to user chat_id={chat_id}")
+    
+    # Also apply to legacy tracker if Telegram is disabled
+    if not notifier.enabled:
+        position_events = position_tracker.apply_trade(trade, my_size)
+        notifier.notify_events(position_events)
+
+    # Dry run mode - don't place real orders
     if dry_run:
         logger.info("🏃 DRY RUN MODE: Not placing real order")
         return
 
-    # Place the copy order
+    # Place the copy order (only once, not per user)
     if clob_client is None:
         logger.error("❌ CLOB client not initialized, cannot place order")
         return
@@ -482,7 +957,9 @@ def main_loop(
     poll_interval: float,
     risk_multiplier: float,
     max_usdc: float,
-    dry_run: bool
+    dry_run: bool,
+    position_tracker: PositionTracker,
+    notifier: TelegramNotifier
 ) -> None:
     """
     Main polling loop: fetch trades, process them, save state.
@@ -495,6 +972,8 @@ def main_loop(
         risk_multiplier: Position sizing multiplier
         max_usdc: Max USDC per trade
         dry_run: If True, don't place real orders
+        position_tracker: Tracker for open/closed positions
+        notifier: Telegram notifier instance
     """
     logger.info("Starting monitoring loop... Press Ctrl+C to stop")
     logger.info("")
@@ -510,13 +989,33 @@ def main_loop(
 
             # Process each trade immediately (minimize latency)
             for trade in trades:
-                process_trade(trade, clob_client, risk_multiplier, max_usdc, dry_run)
+                process_trade(
+                    trade,
+                    clob_client,
+                    risk_multiplier,
+                    max_usdc,
+                    dry_run,
+                    position_tracker,
+                    notifier
+                )
 
                 # Update state timestamp
                 if trade.timestamp > state.last_seen_timestamp:
                     state.last_seen_timestamp = trade.timestamp
 
                 # Save state after each trade
+                # Note: When Telegram is enabled, positions are tracked per-user in-memory
+                # Only save global state (seen trades, timestamps)
+                if not notifier.enabled:
+                    # Legacy mode: save positions to global state
+                    state.open_positions = position_tracker.serialize_open_positions()
+                    state.closed_positions = position_tracker.serialize_closed_positions()
+                    state.realized_pnl = position_tracker.total_realized_pnl()
+                else:
+                    # Telegram mode: positions are per-user, only save global tracking state
+                    state.open_positions = {}
+                    state.closed_positions = []
+                    state.realized_pnl = 0.0
                 state.save(STATE_FILE)
 
             # Wait before next poll
@@ -532,6 +1031,16 @@ def main_loop(
 
     finally:
         # Final state save
+        if not notifier.enabled:
+            # Legacy mode: save positions to global state
+            state.open_positions = position_tracker.serialize_open_positions()
+            state.closed_positions = position_tracker.serialize_closed_positions()
+            state.realized_pnl = position_tracker.total_realized_pnl()
+        else:
+            # Telegram mode: positions are per-user, only save global tracking state
+            state.open_positions = {}
+            state.closed_positions = []
+            state.realized_pnl = 0.0
         state.save(STATE_FILE)
 
 
@@ -541,7 +1050,8 @@ def print_banner(
     risk_multiplier: float,
     poll_interval: float,
     dry_run: bool,
-    state: BotState
+    state: BotState,
+    telegram_enabled: bool
 ) -> None:
     """Print startup banner with configuration."""
     logger.info("")
@@ -559,10 +1069,15 @@ def print_banner(
     logger.info(f"  Poll Interval: {poll_interval}s")
     logger.info(f"  Dry Run Mode: {dry_run}")
     logger.info(f"  Log Level: {LOG_LEVEL}")
+    logger.info(f"  Telegram Alerts Enabled: {telegram_enabled}")
+    if telegram_enabled:
+        logger.info(f"  Telegram Mode: Public (any user can use /start)")
     logger.info("")
     logger.info("State:")
     logger.info(f"  Tracked transactions: {len(state.seen_transaction_hashes)}")
     logger.info(f"  Last seen: {datetime.fromtimestamp(state.last_seen_timestamp)}")
+    logger.info(f"  Open positions: {len(state.open_positions)}")
+    logger.info(f"  Realized PnL: ${state.realized_pnl:.2f}")
     logger.info("")
 
 
@@ -585,6 +1100,16 @@ def main() -> None:
 
     # Load persistent state
     state = BotState.load(STATE_FILE)
+    position_tracker = PositionTracker(
+        open_positions=state.open_positions,
+        closed_positions=state.closed_positions,
+        realized_pnl=state.realized_pnl
+    )
+    notifier = TelegramNotifier(
+        bot_token=TELEGRAM_BOT_TOKEN,
+        chat_id=TELEGRAM_CHAT_ID,
+        position_tracker=position_tracker
+    )
 
     # Initialize CLOB client (only if not dry run)
     clob_client: Optional[ClobClient] = None
@@ -615,7 +1140,8 @@ def main() -> None:
         RISK_MULTIPLIER,
         POLL_INTERVAL_SECONDS,
         DRY_RUN,
-        state
+        state,
+        notifier.enabled
     )
 
     # Start main loop
@@ -626,8 +1152,12 @@ def main() -> None:
         poll_interval=POLL_INTERVAL_SECONDS,
         risk_multiplier=RISK_MULTIPLIER,
         max_usdc=MAX_TRADE_USDC,
-        dry_run=DRY_RUN
+        dry_run=DRY_RUN,
+        position_tracker=position_tracker,
+        notifier=notifier
     )
+
+    notifier.stop()
 
 
 if __name__ == "__main__":
