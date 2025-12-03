@@ -1,0 +1,1002 @@
+Installing/upgrading dependencies...
+Starting Polymarket copy bot...
+2025-12-03 15:39:41,306 - INFO - Loaded state: 5411 transactions
+2025-12-03 15:39:41,306 - INFO - 📊 Trading Status: 🔴 STOPPED (Draft Mode)
+2025-12-03 15:39:41,349 - INFO - ✅ Registered all command handlers including menu system
+/Users/haq/CG/polymarket_copy_bot.py:1375: PTBUserWarning: No `JobQueue` set up. To use `JobQueue`, you must install PTB via `pip install "python-telegram-bot[job-queue]"`.
+  job_queue = self.application.job_queue
+2025-12-03 15:39:41,350 - INFO - Telegram bot polling started. Each user gets fresh state on /start.
+2025-12-03 15:39:41,350 - INFO - 
+2025-12-03 15:39:41,350 - INFO - ============================================================
+2025-12-03 15:39:41,350 - INFO -    POLYMARKET COPY TRADING BOT
+2025-12-03 15:39:41,351 - INFO - ============================================================
+2025-12-03 15:39:41,351 - INFO - 
+2025-12-03 15:39:41,351 - INFO - ⚠️  FINANCIAL RISK WARNING ⚠️
+2025-12-03 15:39:41,351 - INFO - This bot trades with real money. Only use funds you can afford to lose!
+2025-12-03 15:39:41,351 - INFO - 
+2025-12-03 15:39:41,351 - INFO - Configuration:
+2025-12-03 15:39:41,351 - INFO -   Target Wallets (2):
+2025-12-03 15:39:41,351 - INFO -     1. 0xeffcc79a8572940cee2238b44eac89f2c48fda88
+2025-12-03 15:39:41,351 - INFO -     2. 0x5b6E4eF2952398983ccEE7E1EFA0fF0D3cf7B12a
+2025-12-03 15:39:41,351 - INFO -   Allowed Markets: Filtering by patterns (4 patterns)
+2025-12-03 15:39:41,351 - INFO -     Patterns: solana up or down, bitcoin up or down, ethereum up or down, xrp up or down
+2025-12-03 15:39:41,351 - INFO -   Max Trade Size: $100.00 USDC
+2025-12-03 15:39:41,351 - INFO -   Risk Multiplier: 1.0x
+2025-12-03 15:39:41,351 - INFO -   Poll Interval: 2.0s
+2025-12-03 15:39:41,351 - INFO -   Dry Run Mode: True
+2025-12-03 15:39:41,351 - INFO -   Log Level: INFO
+2025-12-03 15:39:41,351 - INFO -   Telegram Alerts Enabled: True
+2025-12-03 15:39:41,351 - INFO -   Telegram Mode: Public (any user can use /start)
+2025-12-03 15:39:41,351 - INFO - 
+2025-12-03 15:39:41,351 - INFO - State:
+2025-12-03 15:39:41,351 - INFO -   Tracked transactions: 5411
+2025-12-03 15:39:41,351 - INFO -   Last seen: 2025-12-03 15:33:25
+2025-12-03 15:39:41,351 - INFO -   Open positions: 0
+2025-12-03 15:39:41,351 - INFO -   Realized PnL: $0.00
+2025-12-03 15:39:41,351 - INFO - 
+2025-12-03 15:39:41,351 - INFO - Starting monitoring loop... Press Ctrl+C to stop
+2025-12-03 15:39:41,351 - INFO - 
+2025-12-03 15:39:41,351 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:41,419 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getMe "HTTP/1.1 200 OK"
+2025-12-03 15:39:41,437 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/deleteWebhook "HTTP/1.1 200 OK"
+2025-12-03 15:39:41,438 - INFO - Application started
+2025-12-03 15:39:41,453 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776005
+2025-12-03 15:39:41,453 - INFO - Fetched 2 new trade(s)
+2025-12-03 15:39:41,453 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:41,502 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776005
+2025-12-03 15:39:41,502 - INFO - ============================================================
+2025-12-03 15:39:41,502 - INFO - 🔔 NEW TRADE DETECTED
+2025-12-03 15:39:41,502 - INFO -    Market: 0xccb6970975903ce09a238b4b2e93db4236f6dd5a528ad77ff1f324c28287d793
+2025-12-03 15:39:41,502 - INFO -    Outcome: Down
+2025-12-03 15:39:41,502 - INFO -    Side: BUY
+2025-12-03 15:39:41,502 - INFO -    Size: 1.00 shares @ $0.3400
+2025-12-03 15:39:41,502 - INFO -    Value: $0.34 USDC
+2025-12-03 15:39:41,503 - INFO -    Tx: 0x6aafa6983c39d6b7f0c3e8799806af69aea7b068d7870f93e98b224ee7863cac
+2025-12-03 15:39:41,503 - INFO - ============================================================
+2025-12-03 15:39:41,503 - INFO - Our copy: 1.00 shares ($0.34 USDC, 1.0x multiplier)
+2025-12-03 15:39:41,503 - INFO - 🏃 DRY RUN MODE: Not placing real order
+2025-12-03 15:39:41,508 - INFO - ============================================================
+2025-12-03 15:39:41,508 - INFO - 🔔 NEW TRADE DETECTED
+2025-12-03 15:39:41,508 - INFO -    Market: 0xccb6970975903ce09a238b4b2e93db4236f6dd5a528ad77ff1f324c28287d793
+2025-12-03 15:39:41,508 - INFO -    Outcome: Down
+2025-12-03 15:39:41,508 - INFO -    Side: BUY
+2025-12-03 15:39:41,508 - INFO -    Size: 100.00 shares @ $0.3400
+2025-12-03 15:39:41,508 - INFO -    Value: $34.00 USDC
+2025-12-03 15:39:41,508 - INFO -    Tx: 0x1beb8a1086c0238d7f3542640b5ebe387e2b34e65487250170fee8e6c5c7b521
+2025-12-03 15:39:41,508 - INFO - ============================================================
+2025-12-03 15:39:41,508 - INFO - Our copy: 100.00 shares ($34.00 USDC, 1.0x multiplier)
+2025-12-03 15:39:41,508 - INFO - 🏃 DRY RUN MODE: Not placing real order
+2025-12-03 15:39:43,514 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:43,559 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:43,559 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:43,601 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:45,603 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:45,652 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:45,652 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:45,721 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:47,723 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:47,767 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:47,767 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:47,814 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:49,819 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:49,861 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:49,862 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:49,902 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:51,504 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:39:51,905 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:51,957 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:51,957 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:52,001 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:54,007 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:54,070 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:54,070 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:54,119 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:56,125 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:56,165 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:56,166 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:56,212 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:58,213 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:58,274 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:39:58,275 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:39:58,329 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:00,335 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:00,403 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:00,404 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:00,446 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:01,527 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:02,451 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:02,497 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:02,497 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:02,554 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:04,557 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:04,603 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:04,604 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:04,649 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:06,654 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:06,796 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:06,797 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:06,838 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:08,844 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:08,918 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:08,918 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:09,004 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:11,009 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:11,078 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:11,079 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:11,124 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:11,551 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:13,129 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:13,180 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:13,181 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:13,217 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:15,222 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:15,283 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:15,284 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:15,326 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:17,330 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:17,377 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:17,377 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:17,412 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:19,414 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:19,461 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:19,461 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:19,505 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:21,511 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:21,563 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:21,563 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:21,573 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:21,604 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:23,609 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:23,654 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:23,655 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:23,698 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:25,704 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:25,757 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:25,757 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:25,802 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:27,808 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:27,881 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:27,882 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:27,955 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:29,959 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:29,997 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:29,998 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:30,036 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:31,596 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:32,042 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:32,097 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:32,097 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:32,163 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:34,167 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:34,206 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:34,206 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:34,261 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:36,267 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:36,312 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:36,312 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:36,354 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:38,358 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:38,423 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:38,423 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:38,467 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:40,469 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:40,527 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:40,527 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:40,569 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:41,616 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:42,572 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:42,617 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:42,617 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:42,662 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:44,664 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:44,712 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:44,712 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:44,747 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:46,752 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:46,808 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:46,808 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:46,844 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:48,849 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:48,902 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:48,902 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:48,939 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:50,944 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:51,017 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:51,018 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:51,057 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:51,635 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:40:53,057 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:53,119 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:53,119 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:53,183 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:55,188 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:55,242 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:55,242 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:55,279 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:57,281 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:57,341 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:57,341 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:57,395 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:59,400 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:59,453 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:40:59,454 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:40:59,491 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:01,496 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:01,539 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:01,540 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:01,583 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:01,659 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:03,587 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:03,634 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:03,635 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:03,671 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:05,676 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:05,718 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:05,719 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:05,770 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:07,771 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:07,826 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:07,826 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:07,896 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:09,898 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:09,942 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:09,942 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:10,003 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:11,683 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:12,007 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:12,046 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:12,047 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:12,083 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:14,088 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:14,234 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:14,234 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:14,279 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:16,281 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:16,326 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:16,327 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:16,392 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:18,398 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:18,475 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:18,476 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:18,527 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:20,536 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:20,585 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:20,586 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:20,621 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:21,703 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:22,626 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:22,680 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:22,680 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:22,734 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:24,738 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:24,786 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:24,787 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:24,826 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:26,830 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:26,892 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:26,893 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:26,947 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:28,949 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:28,998 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:28,999 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:29,046 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:31,050 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:31,108 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:31,109 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:31,183 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:31,728 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:33,189 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:33,236 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:33,237 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:33,308 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:35,312 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:35,361 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:35,361 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:35,395 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:37,399 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:37,442 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:37,442 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:37,511 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:39,512 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:39,560 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:39,561 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:39,612 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:41,615 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:41,680 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:41,681 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:41,719 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:41,753 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:43,722 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:43,868 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:43,871 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:43,911 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:45,912 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:45,985 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:45,986 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:46,023 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:48,024 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:48,070 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:48,070 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:48,126 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:50,130 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:50,191 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:50,191 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:50,240 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:51,771 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:41:52,245 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:52,296 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:52,296 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:52,340 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:54,344 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:54,399 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:54,399 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:54,456 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:56,461 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:56,508 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:56,508 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:56,562 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:58,566 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:58,612 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:41:58,613 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:41:58,650 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:00,651 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:00,713 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:00,713 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:00,781 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:01,785 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:02,781 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:02,831 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:02,831 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:02,867 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:04,867 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:04,927 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:04,927 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:04,972 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:06,976 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:07,054 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:07,054 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:07,135 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:09,136 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:09,186 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:09,187 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:09,223 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:11,228 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:11,280 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:11,281 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:11,327 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:11,805 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:13,330 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:13,384 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:13,385 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:13,424 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:15,429 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:15,471 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:15,472 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:15,508 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:17,513 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:17,582 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:17,582 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:17,637 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:19,641 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:19,704 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:19,705 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:19,751 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:21,756 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:21,803 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:21,804 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:21,829 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:21,841 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:23,845 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:23,907 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:23,907 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:23,962 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:25,967 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:26,039 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:26,040 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:26,092 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:28,095 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:28,149 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:28,149 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:28,196 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:30,201 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:30,261 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:30,261 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:30,333 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:31,849 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:32,337 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:32,387 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:32,387 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:32,422 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:34,428 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:34,491 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:34,492 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:34,545 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:36,549 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:36,600 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:36,601 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:36,650 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:38,655 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:38,732 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:38,733 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:38,785 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:40,788 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:40,821 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:40,821 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:40,863 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:41,870 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:42,865 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:42,926 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:42,927 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:42,970 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:44,973 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:45,029 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:45,030 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:45,072 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:47,078 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:47,234 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:47,235 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:47,284 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:49,289 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:49,345 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:49,345 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:49,395 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:51,400 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:51,450 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:51,451 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:51,504 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:51,892 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:42:53,506 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:53,568 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:53,568 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:53,618 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:55,623 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:55,703 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:55,704 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:55,799 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:57,803 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:57,857 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:57,858 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:57,894 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:59,900 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:59,943 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:42:59,944 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:42:59,987 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:01,913 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:01,989 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:02,043 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:02,043 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:02,085 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:04,091 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:04,130 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:04,130 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:04,172 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:06,177 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:06,231 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:06,232 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:06,283 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:08,288 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:08,336 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:08,337 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:08,378 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:10,379 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:10,520 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:10,521 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:10,562 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:11,935 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:12,564 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:12,613 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:12,614 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:12,654 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:14,656 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:14,714 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:14,715 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:14,752 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:16,758 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:16,801 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:16,802 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:16,850 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:18,855 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:18,905 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:18,906 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:18,948 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:20,953 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:21,004 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:21,005 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:21,041 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:21,958 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:23,045 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:23,102 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:23,103 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:23,142 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:25,146 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:25,209 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:25,210 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:25,261 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:27,265 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:27,327 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:27,328 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:27,364 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:29,370 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:29,455 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:29,456 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:29,520 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:31,523 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:31,566 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:31,567 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:31,620 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:31,982 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:33,626 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:33,668 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:33,669 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:33,715 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:35,717 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:35,767 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:35,767 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:35,830 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:37,835 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:37,897 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:37,898 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:37,935 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:39,941 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:39,993 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:39,994 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:40,034 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:42,007 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:42,039 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:42,091 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:42,091 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:42,131 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:44,134 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:44,197 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:44,198 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:44,256 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:46,260 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:46,315 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:46,316 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:46,358 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:48,363 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:48,419 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:48,419 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:48,486 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:50,492 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:50,571 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:50,571 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:50,606 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:52,030 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:43:52,610 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:52,665 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:52,665 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:52,711 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:54,715 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:54,767 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:54,768 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:54,817 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:56,822 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:56,881 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:56,881 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:56,923 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:58,929 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:58,978 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:43:58,979 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:43:59,024 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:01,029 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:01,087 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:01,087 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:01,137 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:02,056 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:03,143 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:03,195 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:03,196 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:03,241 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:05,243 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:05,294 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:05,295 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:05,351 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:07,356 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:07,413 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:07,413 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:07,460 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:09,462 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:09,522 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:09,523 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:09,557 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:11,562 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:11,612 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:11,613 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:11,653 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:12,076 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:13,656 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:13,735 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:13,736 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:13,779 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:15,782 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:15,829 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:15,830 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:15,874 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:17,877 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:17,955 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:17,955 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:18,009 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:20,010 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:20,060 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:20,061 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:20,098 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:22,101 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:22,103 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:22,151 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:22,151 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:22,189 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:24,193 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:24,241 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:24,242 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:24,284 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:26,288 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:26,336 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:26,337 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:26,381 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:28,386 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:28,446 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:28,446 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:28,575 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:30,575 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:30,620 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:30,621 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:30,657 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:32,134 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:32,660 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:32,704 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:32,705 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:32,744 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:34,750 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:34,793 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:34,793 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:34,833 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:36,838 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:36,905 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:36,906 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:36,971 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:38,974 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:39,036 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:39,036 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:39,077 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:41,082 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:41,131 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:41,132 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:41,173 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:42,155 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:43,177 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:43,222 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:43,222 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:43,262 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:45,267 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:45,323 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:45,324 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:45,366 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:47,372 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:47,415 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:47,416 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:47,456 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:49,458 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:49,501 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:49,502 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:49,539 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:51,543 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:51,607 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:51,608 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:51,673 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:52,181 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:44:53,676 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:53,740 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:53,741 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:53,795 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:55,797 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:55,835 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:55,835 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:55,885 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:57,888 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:57,931 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:57,932 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:44:57,976 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:44:59,980 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:00,042 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:00,042 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:00,090 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:02,093 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:02,142 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:02,142 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:02,184 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:02,207 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:04,188 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:04,237 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:04,238 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:04,278 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:06,280 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:06,336 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:06,336 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:06,380 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:08,386 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:08,441 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:08,441 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:08,490 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:10,495 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:10,557 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:10,558 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:10,603 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:12,226 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:12,609 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:12,663 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:12,663 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:12,709 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:14,715 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:14,761 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:14,761 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:14,795 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:16,801 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:16,842 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:16,843 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:16,876 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:18,881 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:18,939 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:18,940 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:18,981 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:20,985 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:21,039 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:21,040 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:21,084 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:22,247 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:23,089 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:23,136 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:23,136 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:23,182 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:25,188 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:25,246 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:25,246 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:25,288 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:27,293 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:27,335 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:27,335 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:27,396 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:29,398 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:29,539 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:29,539 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:29,576 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:31,581 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:31,630 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:31,630 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:31,667 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:32,269 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:33,668 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:33,723 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:33,723 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:33,758 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:35,763 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:35,810 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:35,811 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:35,857 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:37,859 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:37,965 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:37,965 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:38,027 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:40,032 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:40,089 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:40,089 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:40,125 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:42,128 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:42,177 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:42,178 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:42,212 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:42,290 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:44,214 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:44,256 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:44,256 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:44,297 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:46,302 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:46,379 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:46,379 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:46,422 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:48,427 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:48,496 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:48,496 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:48,546 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:50,552 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:50,595 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:50,595 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:50,675 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:52,309 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:45:52,678 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:52,769 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:52,770 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:52,822 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:54,823 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:54,865 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:54,865 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:54,902 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:56,906 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:56,954 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:56,955 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:57,016 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:59,022 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:59,075 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:45:59,075 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:45:59,120 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:01,123 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:01,169 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:01,170 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:01,218 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:02,329 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:03,224 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:03,281 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:03,282 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:03,319 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:05,322 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:05,368 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:05,369 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:05,419 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:07,424 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:07,476 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:07,477 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:07,519 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:09,524 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:09,766 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:09,767 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:09,804 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:11,809 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:11,869 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:11,870 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:11,912 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:12,354 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:13,917 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:13,971 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:13,971 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:14,034 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:16,039 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:16,082 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:16,083 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:16,120 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:18,125 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:18,174 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:18,175 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:18,231 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:20,236 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:20,289 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:20,290 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:20,383 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:22,378 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:22,388 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:22,447 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:22,447 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:22,488 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:24,493 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:24,548 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:24,548 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:24,589 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:26,594 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:26,708 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:26,708 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:26,750 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:28,755 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:28,795 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:28,796 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:28,836 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:30,838 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:30,874 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:30,874 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:30,909 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:32,400 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:32,914 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:33,039 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:33,039 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:33,082 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:35,086 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:35,130 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:35,130 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:35,175 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:37,180 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:37,236 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:37,236 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:37,286 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:39,291 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:39,338 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:39,339 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:39,405 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:41,408 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:41,465 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:41,466 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:41,513 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:42,422 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:43,514 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:43,562 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:43,562 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:43,596 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:45,601 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:45,643 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:45,644 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:45,685 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:47,690 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:47,728 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:47,729 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:47,770 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:49,771 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:49,825 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:49,826 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:49,863 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:51,864 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:51,907 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:51,907 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:51,946 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:52,441 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:46:53,952 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:54,008 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:54,009 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:54,064 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:56,065 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:56,120 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:56,120 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:56,155 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:58,160 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:58,226 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:46:58,227 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:46:58,276 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:00,281 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:00,332 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:00,332 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:00,373 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:02,378 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:02,426 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:02,426 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:02,469 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:02,495 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:47:04,473 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:04,522 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:04,523 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:04,563 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:06,565 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:06,608 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:06,608 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:06,647 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:08,652 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:08,697 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:08,698 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:08,740 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:10,742 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:10,791 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:10,792 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:10,852 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:12,524 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:47:12,852 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:12,900 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:12,901 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:12,949 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:14,954 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:14,996 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:14,997 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:15,037 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:17,039 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:17,079 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:17,079 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:17,127 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:19,132 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:19,190 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:19,190 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:19,231 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:21,237 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:21,290 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:21,291 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:21,348 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:22,547 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:47:23,349 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:23,404 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:23,404 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:23,442 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:25,443 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:25,488 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:25,488 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:25,555 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:27,560 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:27,605 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:27,605 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:27,646 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:29,647 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:29,691 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:29,692 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:29,737 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351

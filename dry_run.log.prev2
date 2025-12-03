@@ -1,0 +1,75 @@
+Installing/upgrading dependencies...
+Starting Polymarket copy bot...
+2025-12-03 15:47:40,316 - WARNING - 
+2025-12-03 15:47:40,316 - WARNING - ⚠️  WARNING: No POLYMARKET_PRIVATE_KEY configured.
+2025-12-03 15:47:40,316 - WARNING - The bot will start in DRAFT MODE only.
+2025-12-03 15:47:40,316 - WARNING - To enable live trading, set POLYMARKET_PRIVATE_KEY in .env and restart.
+2025-12-03 15:47:40,316 - WARNING - 
+2025-12-03 15:47:40,317 - INFO - Loaded state: 5413 transactions
+2025-12-03 15:47:40,317 - INFO - 📊 Trading Status: 🔴 STOPPED (Draft Mode)
+2025-12-03 15:47:40,357 - INFO - ✅ Registered all command handlers including menu system
+/Users/haq/CG/polymarket_copy_bot.py:1386: PTBUserWarning: No `JobQueue` set up. To use `JobQueue`, you must install PTB via `pip install "python-telegram-bot[job-queue]"`.
+  job_queue = self.application.job_queue
+2025-12-03 15:47:40,359 - INFO - Telegram bot polling started. Each user gets fresh state on /start.
+2025-12-03 15:47:40,359 - INFO - 
+2025-12-03 15:47:40,359 - INFO - ============================================================
+2025-12-03 15:47:40,359 - INFO -    POLYMARKET COPY TRADING BOT
+2025-12-03 15:47:40,359 - INFO - ============================================================
+2025-12-03 15:47:40,359 - INFO - 
+2025-12-03 15:47:40,359 - INFO - ⚠️  FINANCIAL RISK WARNING ⚠️
+2025-12-03 15:47:40,359 - INFO - This bot trades with real money. Only use funds you can afford to lose!
+2025-12-03 15:47:40,359 - INFO - 
+2025-12-03 15:47:40,359 - INFO - Configuration:
+2025-12-03 15:47:40,359 - INFO -   Target Wallets (2):
+2025-12-03 15:47:40,360 - INFO -     1. 0xeffcc79a8572940cee2238b44eac89f2c48fda88
+2025-12-03 15:47:40,360 - INFO -     2. 0x5b6E4eF2952398983ccEE7E1EFA0fF0D3cf7B12a
+2025-12-03 15:47:40,360 - INFO -   Allowed Markets: Filtering by patterns (4 patterns)
+2025-12-03 15:47:40,360 - INFO -     Patterns: solana up or down, bitcoin up or down, ethereum up or down, xrp up or down
+2025-12-03 15:47:40,360 - INFO -   Max Trade Size: $100.00 USDC
+2025-12-03 15:47:40,360 - INFO -   Risk Multiplier: 1.0x
+2025-12-03 15:47:40,360 - INFO -   Poll Interval: 2.0s
+2025-12-03 15:47:40,360 - INFO -   Dry Run Mode: True
+2025-12-03 15:47:40,360 - INFO -   Log Level: INFO
+2025-12-03 15:47:40,360 - INFO -   Telegram Alerts Enabled: True
+2025-12-03 15:47:40,360 - INFO -   Telegram Mode: Public (any user can use /start)
+2025-12-03 15:47:40,360 - INFO - 
+2025-12-03 15:47:40,360 - INFO - State:
+2025-12-03 15:47:40,360 - INFO -   Tracked transactions: 5413
+2025-12-03 15:47:40,360 - INFO -   Last seen: 2025-12-03 15:39:11
+2025-12-03 15:47:40,360 - INFO -   Open positions: 0
+2025-12-03 15:47:40,360 - INFO -   Realized PnL: $0.00
+2025-12-03 15:47:40,360 - INFO - 
+2025-12-03 15:47:40,360 - INFO - Starting monitoring loop... Press Ctrl+C to stop
+2025-12-03 15:47:40,360 - INFO - 
+2025-12-03 15:47:40,360 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:40,439 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getMe "HTTP/1.1 200 OK"
+2025-12-03 15:47:40,461 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/deleteWebhook "HTTP/1.1 200 OK"
+2025-12-03 15:47:40,461 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:40,462 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:40,463 - INFO - Application started
+2025-12-03 15:47:40,491 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:42,493 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:42,527 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:42,528 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:42,579 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:44,581 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:44,617 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:44,617 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:44,647 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:46,650 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:46,689 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:46,690 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:46,719 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:48,724 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:48,779 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:48,780 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:48,808 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:50,619 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 15:47:50,812 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:50,854 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:50,854 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:50,893 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:52,899 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:52,945 - INFO - API returned 100 activities, filtering for trades after timestamp 1764776351
+2025-12-03 15:47:52,945 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 15:47:52,972 - INFO - API returned 0 activities, filtering for trades after timestamp 1764776351
