@@ -476,14 +476,14 @@ class PositionTracker:
         Update tracked positions with a newly copied trade.
         Returns list of events describing what changed.
         
-        In prediction markets, buying opposite outcomes on the same market
-        should be treated as closing/hedging the position.
+        Polymarket uses YES/NO tokens - positions are non-negative quantities per outcome token.
+        No negative balances exist - you "short" by owning the opposite outcome.
         """
         if my_size <= 0:
             return []
 
-        signed_size = my_size if trade.side == "BUY" else -my_size
-        if abs(signed_size) < POSITION_EPSILON:
+        trade_qty = my_size  # Always positive - actual quantity traded
+        if trade_qty < POSITION_EPSILON:
             return []
 
         events: List[PositionEvent] = []
@@ -509,340 +509,289 @@ class PositionTracker:
             # Keep only last 1000 trades to prevent memory issues
             if len(self.trade_history) > 1000:
                 self.trade_history = self.trade_history[-1000:]
-            # First, check if we have an opposite position on the same market
-            # In prediction markets, buying opposite outcomes closes the position
-            # BUT: only hedge if we have an open position in the opposite direction
-            opposite_outcome = "Down" if trade.outcome.upper() == "UP" else "Up"
-            opposite_key = None
-            for key, pos in self.open_positions.items():
-                if (pos.get("market_id") == trade.market_id and 
-                    pos.get("outcome") == opposite_outcome):
-                    # Only match if the position is actually open (non-zero size)
-                    pos_size = pos.get("net_size", 0.0)
-                    if abs(pos_size) >= POSITION_EPSILON:
-                        opposite_key = key
-                        break
+            # Decision flow for Polymarket (non-negative token quantities):
+            # 1. If BUY: Check opposite position first (hedging), then same position (increase/open)
+            # 2. If SELL: Check same position (close), invalid if no position
             
-            # If we have an opposite position, treat this as closing/hedging
-            if opposite_key:
-                opposite_pos = self.open_positions[opposite_key]
-                opposite_size = opposite_pos.get("net_size", 0.0)
+            # Get current position for this token_id (non-negative quantity)
+            existing = self.open_positions.get(trade.token_id)
+            pos_before = existing.get("qty", existing.get("net_size", 0.0)) if existing else 0.0
+            # Handle backward compatibility: convert net_size to qty if needed
+            if existing and "qty" not in existing and "net_size" in existing:
+                pos_before = max(0.0, existing.get("net_size", 0.0))  # Ensure non-negative
+            
+            # For BUY trades: check opposite position first (hedging)
+            if trade.side == "BUY":
+                opposite_outcome = "Down" if trade.outcome.upper() == "UP" else "Up"
+                opposite_key = None
+                opposite_qty_before = 0.0
                 
-                # In prediction markets, hedging happens when:
-                # - You have a long position (positive size) in one outcome
-                # - And you BUY the opposite outcome (which creates a long position in the opposite)
-                # This locks in a guaranteed payout
-                #
-                # We only hedge if:
-                # 1. We have a long position (opposite_size > 0) in the opposite outcome
-                # 2. And we're BUYING (trade.side == "BUY") the current outcome
-                # This means we're buying both sides, which hedges the position
-                if trade.side == "BUY" and opposite_size > 0:
-                    # Valid hedge: long position in opposite, buying current outcome
-                    pass  # Continue with hedging
-                else:
-                    # Not a valid hedge - treat as new position
-                    opposite_key = None
+                for key, pos in self.open_positions.items():
+                    if (pos.get("market_id") == trade.market_id and 
+                        pos.get("outcome") == opposite_outcome):
+                        # Get quantity (non-negative)
+                        qty = pos.get("qty", pos.get("net_size", 0.0))
+                        if "qty" not in pos and "net_size" in pos:
+                            qty = max(0.0, pos.get("net_size", 0.0))  # Backward compat
+                        if qty >= POSITION_EPSILON:
+                            opposite_key = key
+                            opposite_qty_before = qty
+                            break
                 
-                if opposite_key:
-                    # Calculate closing size
-                    closing_size = min(abs(opposite_size), abs(signed_size))
+                # HEDGING: BUY opposite outcome when we have opposite position
+                if opposite_key and opposite_qty_before > 0:
+                    opposite_pos = self.open_positions[opposite_key]
+                    opposite_avg_price = float(opposite_pos.get("avg_entry_price", 0.0))
                     
-                    # In prediction markets: if you buy Up at $0.60 and Down at $0.40,
-                    # you've locked in a loss of $0.20 per share (the spread)
-                    # PnL = -closing_size * (entry_price + exit_price - 1.0)
-                    # Because: you pay entry + exit, but can only win $1.00
-                    entry_price = opposite_pos.get("avg_entry_price", 0.0)
-                    exit_price = trade.price
+                    # Calculate hedged size (amount that becomes risk-free)
+                    hedge_size = min(opposite_qty_before, trade_qty)
                     
-                    # For prediction markets: when you hedge, you're locking in a guaranteed payout
-                    # If you buy Up at $0.60 and Down at $0.40 for the same size:
-                    # - You paid: $0.60 + $0.40 = $1.00 per share
-                    # - You're guaranteed: $1.00 per share (one will win)
-                    # - Net: $0.00 (break even)
-                    # 
-                    # If prices moved (e.g., Up at $0.60, Down at $0.50):
-                    # - You paid: $0.60 + $0.50 = $1.10 per share
-                    # - You're guaranteed: $1.00 per share
-                    # - Net: -$0.10 per share (loss)
-                    #
-                    # PnL = closing_size * (1.0 - entry_price - exit_price)
-                    # This gives: positive when you profit, negative when you lose
-                    pnl = closing_size * (1.0 - entry_price - exit_price)
-                    self.realized_pnl += pnl
+                    # Validate prices
+                    if opposite_avg_price <= 0 or trade.price <= 0:
+                        logger.error(f"⚠️  Invalid prices in hedge: opposite={opposite_avg_price}, new={trade.price}, skipping hedge")
+                        opposite_key = None
+                    elif opposite_avg_price > 1.0 or trade.price > 1.0:
+                        logger.error(f"⚠️  Prices > 1.0 in hedge: opposite={opposite_avg_price}, new={trade.price}, skipping hedge")
+                        opposite_key = None
                     
-                    # Update remaining sizes
-                    # If opposite_size is positive (long), subtract closing_size
-                    # If opposite_size is negative (short), add closing_size
-                    if opposite_size > 0:
-                        remaining_opposite = opposite_size - closing_size
-                    else:
-                        remaining_opposite = opposite_size + closing_size
-                    
-                    # When hedging: we're BUYING the opposite side, so we create a position
-                    # The new position size is the full signed_size (what we bought)
-                    # This is because hedging means buying both sides, creating a new position
-                    new_position_size = signed_size  # Full amount bought becomes the hedge position
-                    
-                    # Record closed position
-                    # Get opened_at from the opposite position (when it was first opened)
-                    opened_at = opposite_pos.get("opened_at", opposite_pos.get("last_update", timestamp))
-                    closed_entry = {
-                        "token_id": opposite_pos.get("token_id", ""),
-                        "market_id": trade.market_id,
-                        "outcome": f"{opposite_outcome} → {trade.outcome}",
-                        "size": closing_size,
-                        "entry_price": entry_price,
-                        "exit_price": exit_price,
-                        "entry_size": closing_size,  # Size when opened
-                        "realized_pnl": pnl,
-                        "opened_at": opened_at,
-                        "closed_at": timestamp,
-                        "type": "HEDGE_CLOSE" if abs(remaining_opposite) < POSITION_EPSILON else "PARTIAL_HEDGE",
-                        "title": trade.title or opposite_pos.get("title", ""),
-                        "coin_name": trade.get_coin_name() or opposite_pos.get("coin_name", "Unknown")
-                    }
-                    self.closed_positions.append(closed_entry)
-                    if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
-                        self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
-                    
-                    # Update or remove opposite position
-                    if abs(remaining_opposite) < POSITION_EPSILON:
-                        if opposite_key is not None:
+                    if opposite_key:
+                        # Locked PnL per hedged share pair = 1.0 - (price_up + price_down)
+                        # This is the guaranteed payout minus total cost
+                        locked_pnl = hedge_size * (1.0 - opposite_avg_price - trade.price)
+                        self.realized_pnl += locked_pnl
+                        
+                        logger.info(f"🔄 HEDGE: {hedge_size:.1f} {opposite_outcome}@{opposite_avg_price:.4f} + "
+                                  f"{hedge_size:.1f} {trade.outcome}@{trade.price:.4f}, "
+                                  f"locked_pnl=${locked_pnl:.2f}")
+                        
+                        # Update opposite position (reduce by hedged amount)
+                        remaining_opposite = opposite_qty_before - hedge_size
+                        if remaining_opposite < POSITION_EPSILON:
+                            # Fully hedged - remove opposite position
                             self.open_positions.pop(opposite_key, None)
-                    else:
-                        opposite_pos["net_size"] = remaining_opposite
-                        opposite_pos["last_update"] = timestamp
-                    
-                    # Create new hedge position (the opposite side we just bought)
-                    # This is the hedge position that offsets the closed portion
-                    if abs(new_position_size) >= POSITION_EPSILON:
-                        # Check if we already have a position for this token_id
-                        existing_new = self.open_positions.get(trade.token_id)
-                        if existing_new:
-                            # Add to existing position
-                            existing_size = existing_new.get("net_size", 0.0)
-                            total_size = existing_size + new_position_size
-                            if abs(total_size) < POSITION_EPSILON:
-                                self.open_positions.pop(trade.token_id, None)
-                            else:
-                                # Recalculate average price
-                                total_abs = abs(existing_size) + abs(new_position_size)
-                                new_avg = (
-                                    abs(existing_size) * existing_new.get("avg_entry_price", 0.0) +
-                                    abs(new_position_size) * trade.price
-                                ) / total_abs
-                                existing_new["net_size"] = total_size
-                                existing_new["avg_entry_price"] = new_avg
-                                existing_new["last_update"] = timestamp
+                            hedge_type = "HEDGE_CLOSE"
                         else:
-                            # Create new hedge position (the opposite side we just bought)
+                            # Partially hedged - update quantity
+                            opposite_pos["qty"] = remaining_opposite
+                            opposite_pos["net_size"] = remaining_opposite  # Backward compat
+                            opposite_pos["last_update"] = timestamp
+                            hedge_type = "PARTIAL_HEDGE"
+                        
+                        # Record hedge event (not a "close" - it's locking in payout)
+                        opened_at = opposite_pos.get("opened_at", opposite_pos.get("last_update", timestamp))
+                        hedge_entry = {
+                            "token_id": opposite_pos.get("token_id", ""),
+                            "market_id": trade.market_id,
+                            "outcome": f"{opposite_outcome} → {trade.outcome}",
+                            "size": hedge_size,
+                            "entry_price": opposite_avg_price,  # Price of existing leg
+                            "exit_price": trade.price,  # Price of new leg (not an exit!)
+                            "entry_size": hedge_size,
+                            "realized_pnl": locked_pnl,  # Locked PnL, not realized yet
+                            "opened_at": opened_at,
+                            "closed_at": timestamp,
+                            "type": hedge_type,
+                            "title": trade.title or opposite_pos.get("title", ""),
+                            "coin_name": trade.get_coin_name() or opposite_pos.get("coin_name", "Unknown")
+                        }
+                        self.closed_positions.append(hedge_entry)
+                        if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
+                            self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
+                        
+                        # Create/update position for the new leg we just bought
+                        new_qty = trade_qty  # Full amount bought
+                        if existing:
+                            # Add to existing position
+                            existing_qty = pos_before
+                            total_qty = existing_qty + new_qty
+                            # Recalculate VWAP
+                            total_cost = existing_qty * existing.get("avg_entry_price", 0.0) + new_qty * trade.price
+                            new_avg_price = total_cost / total_qty if total_qty > 0 else trade.price
+                            existing["qty"] = total_qty
+                            existing["net_size"] = total_qty  # Backward compat
+                            existing["avg_entry_price"] = new_avg_price
+                            existing["last_update"] = timestamp
+                        else:
+                            # Create new position
                             new_position = {
                                 "token_id": trade.token_id,
                                 "market_id": trade.market_id,
                                 "outcome": trade.outcome or "Unknown",
-                                "net_size": new_position_size,
+                                "qty": new_qty,
+                                "net_size": new_qty,  # Backward compat
                                 "avg_entry_price": trade.price,
-                                "opened_at": timestamp,  # Track when position was first opened
+                                "opened_at": timestamp,
                                 "last_update": timestamp,
                                 "title": trade.title or "",
                                 "coin_name": trade.get_coin_name()
                             }
                             self.open_positions[trade.token_id] = new_position
+                        
+                        # Build hedge message
+                        pnl_emoji = "✅" if locked_pnl >= 0 else "❌"
+                        pnl_sign = "+" if locked_pnl >= 0 else ""
+                        coin_name = trade.get_coin_name() or opposite_pos.get("coin_name", "Unknown")
+                        outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
+                        opposite_emoji = "🔴" if trade.outcome.upper() == "UP" else "🟢"
+                        entry_cents = int(opposite_avg_price * 100)
+                        exit_cents = int(trade.price * 100)
+                        
+                        if hedge_type == "HEDGE_CLOSE":
+                            message = (
+                                f"🔄 HEDGE {coin_name}\n"
+                                f"{trade.title or 'Unknown'}\n"
+                                f"{opposite_emoji}-{hedge_size:.1f} {opposite_outcome} @ {entry_cents}¢ | {outcome_emoji}+{hedge_size:.1f} {trade.outcome} @ {exit_cents}¢\n"
+                                f"{pnl_emoji} Locked PnL: {pnl_sign}${locked_pnl:.2f} ✅ Fully Hedged"
+                            )
+                        else:
+                            message = (
+                                f"🔄 PARTIAL HEDGE {coin_name}\n"
+                                f"{trade.title or 'Unknown'}\n"
+                                f"{opposite_emoji}-{hedge_size:.1f} {opposite_outcome} @ {entry_cents}¢ | {outcome_emoji}+{hedge_size:.1f} {trade.outcome} @ {exit_cents}¢\n"
+                                f"{pnl_emoji} Locked PnL: {pnl_sign}${locked_pnl:.2f} ⚠️ Partial ({remaining_opposite:.1f} {opposite_outcome} remaining)"
+                            )
+                        
+                        events.append(PositionEvent(
+                            event_type=hedge_type,
+                            message=message,
+                            payload=hedge_entry,
+                            realized_pnl=locked_pnl
+                        ))
+                        return events
+                
+                # INCREASE: BUY same outcome when we already have position
+                if pos_before > 0 and existing:
+                    # Add to existing position
+                    total_qty = pos_before + trade_qty
+                    total_cost = pos_before * existing.get("avg_entry_price", 0.0) + trade_qty * trade.price
+                    new_avg_price = total_cost / total_qty if total_qty > 0 else trade.price
                     
-                    # Make hedging message very clear
-                    pnl_emoji = "✅" if pnl >= 0 else "❌"
-                    pnl_sign = "+" if pnl >= 0 else ""
+                    existing["qty"] = total_qty
+                    existing["net_size"] = total_qty  # Backward compat
+                    existing["avg_entry_price"] = new_avg_price
+                    existing["last_update"] = timestamp
                     
-                    coin_name = trade.get_coin_name() or opposite_pos.get("coin_name", "Unknown")
+                    coin_name = trade.get_coin_name()
                     outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
-                    opposite_emoji = "🔴" if trade.outcome.upper() == "UP" else "🟢"
-                    
-                    # Convert prices to cents for display
-                    entry_price_cents = int(entry_price * 100)
-                    exit_price_cents = int(exit_price * 100)
-                    
-                    if closed_entry["type"] == "HEDGE_CLOSE":
-                        message = (
-                            f"🔄 HEDGE {coin_name}\n"
-                            f"{trade.title or 'Unknown'}\n"
-                            f"{opposite_emoji}-{closing_size:.1f} {opposite_outcome} @ {entry_price_cents}¢ | {outcome_emoji}+{closing_size:.1f} {trade.outcome} @ {exit_price_cents}¢\n"
-                            f"{pnl_emoji} PnL: {pnl_sign}${pnl:.2f} ✅ Closed"
-                        )
-                    else:  # PARTIAL_HEDGE
-                        message = (
-                            f"🔄 PARTIAL HEDGE {coin_name}\n"
-                            f"{trade.title or 'Unknown'}\n"
-                            f"{opposite_emoji}-{closing_size:.1f} {opposite_outcome} @ {entry_price_cents}¢ | {outcome_emoji}+{closing_size:.1f} {trade.outcome} @ {exit_price_cents}¢\n"
-                            f"{pnl_emoji} PnL: {pnl_sign}${pnl:.2f} ⚠️ Open"
-                        )
                     
                     events.append(PositionEvent(
-                        event_type=closed_entry["type"],
-                        message=message,
-                        payload=closed_entry,
-                        realized_pnl=pnl
+                        event_type="INCREASED",
+                        message=(
+                            f"📈 +{trade_qty:.1f} {outcome_emoji} {coin_name} {trade.outcome}\n"
+                            f"{trade.title or 'Unknown'}\n"
+                            f"Added: ${trade_qty * trade.price:.1f} | Total: {total_qty:.1f} @ ${new_avg_price:.4f}"
+                        ),
+                        payload=existing.copy()
                     ))
                     return events
-            
-            # No opposite position, proceed with normal tracking
-            existing = self.open_positions.get(trade.token_id)
-
-            # If no existing position, create one
-            if not existing or abs(existing.get("net_size", 0.0)) < POSITION_EPSILON:
+                
+                # OPEN: BUY new position
                 new_position = {
                     "token_id": trade.token_id,
                     "market_id": trade.market_id,
                     "outcome": trade.outcome or "Unknown",
-                    "net_size": signed_size,
+                    "qty": trade_qty,
+                    "net_size": trade_qty,  # Backward compat
                     "avg_entry_price": trade.price,
-                    "opened_at": timestamp,  # Track when position was first opened
+                    "opened_at": timestamp,
                     "last_update": timestamp,
                     "title": trade.title or "",
                     "coin_name": trade.get_coin_name()
                 }
                 self.open_positions[trade.token_id] = new_position
-                direction = "long" if signed_size > 0 else "short"
                 coin_name = trade.get_coin_name()
                 outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
-                direction_emoji = "📈" if direction == "long" else "📉"
                 
                 events.append(PositionEvent(
                     event_type="OPENED",
                     message=(
                         f"🟢 OPEN {outcome_emoji} {coin_name} {trade.outcome}\n"
                         f"{trade.title or 'Unknown'}\n"
-                        f"{direction_emoji} {abs(signed_size):.1f} @ ${trade.price:.4f} (${abs(signed_size) * trade.price:.1f})"
+                        f"📈 {trade_qty:.1f} @ ${trade.price:.4f} (${trade_qty * trade.price:.1f})"
                     ),
                     payload=new_position.copy()
                 ))
                 return events
-
-            current_size = existing["net_size"]
-            # Same direction -> increase
-            if current_size * signed_size > 0:
-                total_abs = abs(current_size) + abs(signed_size)
-                new_avg = (
-                    abs(current_size) * existing["avg_entry_price"] +
-                    abs(signed_size) * trade.price
-                ) / total_abs
-
-                existing["net_size"] = current_size + signed_size
-                existing["avg_entry_price"] = new_avg
-                existing["last_update"] = timestamp
-                direction = "long" if existing["net_size"] > 0 else "short"
-                coin_name = trade.get_coin_name()
-                outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
-                direction_emoji = "📈" if direction == "long" else "📉"
-                
-                events.append(PositionEvent(
-                    event_type="INCREASED",
-                    message=(
-                        f"📈 +{abs(signed_size):.1f} {outcome_emoji} {coin_name} {trade.outcome}\n"
-                        f"{trade.title or 'Unknown'}\n"
-                        f"Added: ${abs(signed_size) * trade.price:.1f} | Total: {abs(existing['net_size']):.1f} @ ${existing['avg_entry_price']:.4f}"
-                    ),
-                    payload=existing.copy()
-                ))
-                return events
-
-            # Opposite direction -> closing/reversing
-            closing_size = min(abs(current_size), abs(signed_size))
-            pnl = closing_size * (trade.price - existing["avg_entry_price"]) * (
-                1 if current_size > 0 else -1
-            )
-            self.realized_pnl += pnl
             
-            # Get opened_at for closed position record
-            opened_at = existing.get("opened_at", existing.get("last_update", timestamp))
-
-            remaining = current_size + signed_size
-            close_type = "FULL_CLOSE" if abs(remaining) < POSITION_EPSILON else "PARTIAL_CLOSE"
-            direction = "long" if current_size > 0 else "short"
-
-            closed_entry = {
-                "token_id": trade.token_id,
-                "market_id": trade.market_id,
-                "outcome": trade.outcome or "Unknown",
-                "size": closing_size,
-                "entry_price": existing["avg_entry_price"],
-                "exit_price": trade.price,
-                "entry_size": closing_size,
-                "realized_pnl": pnl,
-                "opened_at": opened_at,
-                "closed_at": timestamp,
-                "type": close_type,
-                "title": trade.title or existing.get("title", ""),
-                "coin_name": trade.get_coin_name() or existing.get("coin_name", "Unknown")
-            }
-            self.closed_positions.append(closed_entry)
-            if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
-                self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
-
-            coin_name = trade.get_coin_name() or existing.get("coin_name", "Unknown")
-            outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
-            pnl_emoji = "✅" if pnl >= 0 else "❌"
-            pnl_sign = "+" if pnl >= 0 else ""
-
-            if abs(remaining) < POSITION_EPSILON:
-                # Fully closed
-                message = (
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"🔴 POSITION FULLY CLOSED\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"📊 MARKET:\n"
-                    f"   {outcome_emoji} {coin_name} {trade.outcome}\n"
-                    f"   {trade.title or existing.get('title', 'Unknown Market')}\n\n"
-                    f"💼 CLOSED POSITION:\n"
-                    f"   📉 Size: {closing_size:.2f} shares\n"
-                    f"   💵 Exit Price: ${trade.price:.4f}\n"
-                    f"   💰 Entry Price: ${existing.get('avg_entry_price', 0.0):.4f}\n"
-                    f"   💲 Value Closed: ${closing_size * trade.price:.2f} USDC\n\n"
-                    f"💰 RESULT:\n"
-                    f"   {pnl_emoji} Realized PnL: {pnl_sign}${pnl:.2f}"
-                )
-                self.open_positions.pop(trade.token_id, None)
-            elif (remaining > 0 and current_size < 0) or (remaining < 0 and current_size > 0):
-                # Position flipped to opposite direction
-                new_position = {
+            # SELL trades: can only close/reduce existing positions
+            elif trade.side == "SELL":
+                if pos_before == 0 or existing is None:
+                    # Invalid: trying to sell what we don't have
+                    logger.warning(f"⚠️  Invalid SELL: no position for {trade.token_id}, ignoring trade")
+                    return []
+                
+                # Calculate closing size (can't sell more than we own)
+                closing_size = min(trade_qty, pos_before)
+                remaining_qty = pos_before - closing_size
+                
+                # Calculate realized PnL (simple: exit_price - entry_price)
+                avg_entry_price = existing.get("avg_entry_price", 0.0)
+                realized_pnl = closing_size * (trade.price - avg_entry_price)
+                self.realized_pnl += realized_pnl
+                
+                # Get opened_at for closed position record
+                opened_at = existing.get("opened_at", existing.get("last_update", timestamp))
+                
+                close_type = "FULL_CLOSE" if remaining_qty < POSITION_EPSILON else "PARTIAL_CLOSE"
+                
+                closed_entry = {
                     "token_id": trade.token_id,
                     "market_id": trade.market_id,
                     "outcome": trade.outcome or "Unknown",
-                    "net_size": remaining,
-                    "avg_entry_price": trade.price,
-                    "opened_at": timestamp,  # New position opened at reversal
-                    "last_update": timestamp,
+                    "size": closing_size,
+                    "entry_price": avg_entry_price,
+                    "exit_price": trade.price,
+                    "entry_size": closing_size,
+                    "realized_pnl": realized_pnl,
+                    "opened_at": opened_at,
+                    "closed_at": timestamp,
+                    "type": close_type,
                     "title": trade.title or existing.get("title", ""),
-                    "coin_name": coin_name
+                    "coin_name": trade.get_coin_name() or existing.get("coin_name", "Unknown")
                 }
-                self.open_positions[trade.token_id] = new_position
-                new_direction = "long" if remaining > 0 else "short"
-                direction_emoji = "📈" if new_direction == "long" else "📉"
-                message = (
-                    f"🔄 REVERSE {outcome_emoji} {coin_name} {trade.outcome}\n"
-                    f"{trade.title or existing.get('title', 'Unknown')}\n"
-                    f"Close: {closing_size:.1f} @ ${trade.price:.4f} | {pnl_emoji} PnL: {pnl_sign}${pnl:.2f}\n"
-                    f"New: {direction_emoji} {abs(remaining):.1f} @ ${trade.price:.4f}"
-                )
-            else:
-                # Partially closed
-                existing["net_size"] = remaining
-                existing["last_update"] = timestamp
-                remaining_direction = "long" if remaining > 0 else "short"
-                direction_emoji = "📈" if remaining_direction == "long" else "📉"
-                message = (
-                    f"🔴 PARTIAL CLOSE {outcome_emoji} {coin_name} {trade.outcome}\n"
-                    f"{trade.title or existing.get('title', 'Unknown')}\n"
-                    f"Closed: {closing_size:.1f} @ ${trade.price:.4f} | {pnl_emoji} PnL: {pnl_sign}${pnl:.2f}\n"
-                    f"Remaining: {direction_emoji} {abs(remaining):.1f} @ ${existing.get('avg_entry_price', 0.0):.4f}"
-                )
-
-            events.append(PositionEvent(
-                event_type=close_type,
-                message=message,
-                payload=closed_entry,
-                realized_pnl=pnl
-            ))
+                self.closed_positions.append(closed_entry)
+                if len(self.closed_positions) > MAX_CLOSED_POSITIONS:
+                    self.closed_positions = self.closed_positions[-MAX_CLOSED_POSITIONS:]
+                
+                coin_name = trade.get_coin_name() or existing.get("coin_name", "Unknown")
+                outcome_emoji = "🟢" if trade.outcome.upper() == "UP" else "🔴"
+                pnl_emoji = "✅" if realized_pnl >= 0 else "❌"
+                pnl_sign = "+" if realized_pnl >= 0 else ""
+                entry_cents = int(avg_entry_price * 100)
+                exit_cents = int(trade.price * 100)
+                
+                if remaining_qty < POSITION_EPSILON:
+                    # Fully closed
+                    self.open_positions.pop(trade.token_id, None)
+                    message = (
+                        f"🔴 CLOSE {coin_name} {trade.outcome}\n"
+                        f"{trade.title or existing.get('title', 'Unknown')}\n"
+                        f"{outcome_emoji}-{closing_size:.1f} @ {entry_cents}¢→{exit_cents}¢\n"
+                        f"{pnl_emoji} PnL: {pnl_sign}${realized_pnl:.2f} ✅ Closed"
+                    )
+                else:
+                    # Partial close
+                    existing["qty"] = remaining_qty
+                    existing["net_size"] = remaining_qty  # Backward compat
+                    existing["last_update"] = timestamp
+                    remaining_cents = int(avg_entry_price * 100)
+                    message = (
+                        f"🔴 PARTIAL CLOSE {coin_name} {trade.outcome}\n"
+                        f"{trade.title or existing.get('title', 'Unknown')}\n"
+                        f"{outcome_emoji}-{closing_size:.1f} @ {entry_cents}¢→{exit_cents}¢\n"
+                        f"{pnl_emoji} PnL: {pnl_sign}${realized_pnl:.2f} | Remaining: {remaining_qty:.1f} @ {remaining_cents}¢ ⚠️ Open"
+                    )
+                
+                events.append(PositionEvent(
+                    event_type=close_type,
+                    message=message,
+                    payload=closed_entry,
+                    realized_pnl=realized_pnl
+                ))
+                return events
+            
+            # Should not reach here
+            logger.warning(f"⚠️  Unhandled trade: side={trade.side}, token_id={trade.token_id}")
             return events
 
     def snapshot_open_positions(self) -> List[Dict]:
@@ -1032,7 +981,7 @@ class PositionTracker:
             return total_resolution_pnl
     
     def record_hourly_pnl(self, hour_start: datetime, pnl: float) -> None:
-        """Record hourly PnL for the current day."""
+        """Record hourly PnL for the current day. This is called when /pnl is used."""
         with self._lock:
             date_str = hour_start.strftime("%Y-%m-%d")
             hour_key = hour_start.strftime("%I:%M %p")  # e.g., "12:00 PM"
@@ -1040,17 +989,97 @@ class PositionTracker:
             if date_str not in self.daily_hourly_pnl:
                 self.daily_hourly_pnl[date_str] = {}
             
-            # Accumulate PnL for this hour (in case called multiple times)
-            if hour_key in self.daily_hourly_pnl[date_str]:
-                self.daily_hourly_pnl[date_str][hour_key] += pnl
-            else:
-                self.daily_hourly_pnl[date_str][hour_key] = pnl
+            # Set PnL for this hour (don't accumulate - recalculate from closed positions)
+            # The PnL should be calculated from actual closed positions, not accumulated
+            self.daily_hourly_pnl[date_str][hour_key] = pnl
     
-    def get_today_hourly_pnl(self) -> Dict[str, float]:
-        """Get hourly PnL breakdown for today."""
+    def calculate_today_hourly_pnl(self) -> Dict[str, float]:
+        """Calculate hourly PnL breakdown for today from closed positions.
+        This ensures accuracy by recalculating from actual closed positions."""
         with self._lock:
             today_str = datetime.now().strftime("%Y-%m-%d")
-            return self.daily_hourly_pnl.get(today_str, {}).copy()
+            hourly_pnl: Dict[str, float] = {}
+            
+            # Group closed positions by hour
+            for entry in self.closed_positions:
+                closed_at = entry.get("closed_at", 0)
+                if isinstance(closed_at, float):
+                    closed_at = int(closed_at)
+                
+                if closed_at <= 0:
+                    continue  # Skip invalid timestamps
+                
+                # Get the date of this closed position
+                try:
+                    close_dt = datetime.fromtimestamp(closed_at)
+                    entry_date_str = close_dt.strftime("%Y-%m-%d")
+                    
+                    # Only include today's positions
+                    if entry_date_str == today_str:
+                        # Get the hour this position closed
+                        hour_start = close_dt.replace(minute=0, second=0, microsecond=0)
+                        hour_key = hour_start.strftime("%I:%M %p")  # e.g., "12:00 PM"
+                        
+                        pnl = float(entry.get("realized_pnl", 0.0))
+                        
+                        # Validate PnL is reasonable
+                        if abs(pnl) > 100000:  # Sanity check
+                            logger.warning(f"⚠️  Suspicious PnL value: ${pnl:.2f} for position closed at {close_dt}")
+                        
+                        # Accumulate PnL for this hour
+                        if hour_key in hourly_pnl:
+                            hourly_pnl[hour_key] += pnl
+                        else:
+                            hourly_pnl[hour_key] = pnl
+                except (ValueError, OSError) as e:
+                    logger.warning(f"⚠️  Invalid timestamp for closed position: {closed_at}, error: {e}")
+                    continue
+            
+            # Also include resolved positions
+            for entry in self.resolved_positions:
+                resolved_at = entry.get("resolved_at", 0)
+                if isinstance(resolved_at, float):
+                    resolved_at = int(resolved_at)
+                
+                if resolved_at <= 0:
+                    continue  # Skip invalid timestamps
+                
+                # Get the date of this resolved position
+                try:
+                    resolve_dt = datetime.fromtimestamp(resolved_at)
+                    entry_date_str = resolve_dt.strftime("%Y-%m-%d")
+                    
+                    # Only include today's positions
+                    if entry_date_str == today_str:
+                        # Get the hour this position resolved
+                        hour_start = resolve_dt.replace(minute=0, second=0, microsecond=0)
+                        hour_key = hour_start.strftime("%I:%M %p")  # e.g., "12:00 PM"
+                        
+                        pnl = float(entry.get("realized_pnl", 0.0))
+                        
+                        # Validate PnL is reasonable
+                        if abs(pnl) > 100000:  # Sanity check
+                            logger.warning(f"⚠️  Suspicious PnL value: ${pnl:.2f} for resolved position at {resolve_dt}")
+                        
+                        # Accumulate PnL for this hour
+                        if hour_key in hourly_pnl:
+                            hourly_pnl[hour_key] += pnl
+                        else:
+                            hourly_pnl[hour_key] = pnl
+                except (ValueError, OSError) as e:
+                    logger.warning(f"⚠️  Invalid timestamp for resolved position: {resolved_at}, error: {e}")
+                    continue
+            
+            # Log summary for debugging
+            total_calculated = sum(hourly_pnl.values())
+            logger.debug(f"Calculated today's hourly PnL: {len(hourly_pnl)} hours, total=${total_calculated:.2f}")
+            
+            return hourly_pnl
+    
+    def get_today_hourly_pnl(self) -> Dict[str, float]:
+        """Get hourly PnL breakdown for today. Calculates from closed positions."""
+        # Always calculate fresh from closed positions to ensure accuracy
+        return self.calculate_today_hourly_pnl()
     
     def get_hourly_stats(self, start_timestamp: int, end_timestamp: int) -> Dict:
         """Get statistics for a time period: volume, max trade, peak concurrent exposure, PnL."""
@@ -1302,6 +1331,8 @@ class TelegramNotifier:
             self.application.add_handler(CommandHandler("money", self._handle_money))
             self.application.add_handler(CommandHandler("backfill", self._handle_backfill))
             self.application.add_handler(CommandHandler("backfillall", self._handle_backfill_all))
+            self.application.add_handler(CommandHandler("pnlbreakdown", self._handle_pnl_breakdown))
+            self.application.add_handler(CommandHandler("fullpnl1hour", self._handle_full_pnl_1hour))
             self.application.add_handler(CommandHandler("live", self._handle_live))
             self.application.add_handler(CommandHandler("stop", self._handle_stop))
             self.application.add_handler(CommandHandler("prices", self._handle_prices))
@@ -1625,7 +1656,9 @@ class TelegramNotifier:
             "/status - Quick health summary\n"
             "/menu - Main menu with all options\n"
             "/pnl - Current hour PnL\n"
-            "/pnltoday - Today's PnL (since 12 AM)\n\n"
+            "/pnltoday - Today's PnL (since 12 AM)\n"
+            "/pnlbreakdown - Detailed PnL breakdown by hour with individual trades\n"
+            "/fullpnl1hour - Full breakdown of previous hour's PnL\n\n"
             "📈 *Positions & Trades:*\n"
             "/openpositions - List open positions\n"
             "/closedpositions - Recent closed trades\n"
@@ -1960,6 +1993,459 @@ class TelegramNotifier:
         if update.message:
             await update.message.reply_text(message, parse_mode='Markdown')
     
+    async def _handle_pnl_breakdown(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /pnlbreakdown command - show detailed PnL breakdown by hour with individual trades."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        
+        # Get all closed positions for today
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        all_closed = tracker.snapshot_closed_positions(limit=0)
+        all_resolved = tracker.resolved_positions
+        
+        # Group by hour
+        hourly_trades: Dict[str, List[Dict]] = {}
+        
+        for entry in all_closed:
+            closed_at = entry.get("closed_at", 0)
+            if isinstance(closed_at, float):
+                closed_at = int(closed_at)
+            
+            if closed_at <= 0:
+                continue
+            
+            try:
+                close_dt = datetime.fromtimestamp(closed_at)
+                entry_date_str = close_dt.strftime("%Y-%m-%d")
+                
+                if entry_date_str == today_str:
+                    hour_start = close_dt.replace(minute=0, second=0, microsecond=0)
+                    hour_key = hour_start.strftime("%I:%M %p")
+                    
+                    if hour_key not in hourly_trades:
+                        hourly_trades[hour_key] = []
+                    hourly_trades[hour_key].append(entry)
+            except Exception as e:
+                logger.warning(f"Error processing closed position: {e}")
+                continue
+        
+        # Add resolved positions
+        for entry in all_resolved:
+            resolved_at = entry.get("resolved_at", 0)
+            if isinstance(resolved_at, float):
+                resolved_at = int(resolved_at)
+            
+            if resolved_at <= 0:
+                continue
+            
+            try:
+                resolve_dt = datetime.fromtimestamp(resolved_at)
+                entry_date_str = resolve_dt.strftime("%Y-%m-%d")
+                
+                if entry_date_str == today_str:
+                    hour_start = resolve_dt.replace(minute=0, second=0, microsecond=0)
+                    hour_key = hour_start.strftime("%I:%M %p")
+                    
+                    if hour_key not in hourly_trades:
+                        hourly_trades[hour_key] = []
+                    hourly_trades[hour_key].append(entry)
+            except Exception as e:
+                logger.warning(f"Error processing resolved position: {e}")
+                continue
+        
+        if not hourly_trades:
+            if update.message:
+                await update.message.reply_text("📭 No closed trades today yet.")
+            return
+        
+        # Sort hours chronologically
+        sorted_hours = sorted(hourly_trades.items(), key=lambda x: datetime.strptime(x[0], "%I:%M %p").hour)
+        
+        # Build detailed breakdown message
+        lines = ["💰 *Detailed PnL Breakdown - Today*\n"]
+        
+        for hour_key, trades in sorted_hours:
+            # Sort trades by timestamp within hour
+            trades.sort(key=lambda t: t.get("closed_at", t.get("resolved_at", 0)))
+            
+            hour_pnl = sum(float(t.get("realized_pnl", 0.0)) for t in trades)
+            hour_emoji = "✅" if hour_pnl >= 0 else "❌"
+            hour_sign = "+" if hour_pnl >= 0 else ""
+            
+            lines.append(f"\n⏰ *{hour_key}* - {hour_sign}${hour_pnl:.2f} ({len(trades)} trades)")
+            
+            # Show individual trades (limit to avoid message too long)
+            for idx, trade in enumerate(trades[:10]):  # Show first 10 per hour
+                close_type = trade.get("type", "CLOSE")
+                outcome = trade.get("outcome", "Unknown")
+                size = trade.get("size", 0.0)
+                entry_price = trade.get("entry_price", 0.0)
+                exit_price = trade.get("exit_price", trade.get("resolved_price", 0.0))
+                pnl = trade.get("realized_pnl", 0.0)
+                
+                pnl_emoji = "✅" if pnl >= 0 else "❌"
+                pnl_sign = "+" if pnl >= 0 else ""
+                
+                # Format entry/exit prices
+                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                
+                if close_type in ("HEDGE_CLOSE", "PARTIAL_HEDGE"):
+                    lines.append(f"  {pnl_emoji} {close_type}: {size:.1f} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                elif "resolved_at" in trade:
+                    resolved_price = trade.get("resolved_price", 0.0)
+                    resolved_cents = int(resolved_price * 100) if resolved_price > 0 else 0
+                    lines.append(f"  {pnl_emoji} RESOLVED: {size:.1f} {outcome} @ {entry_cents}¢→{resolved_cents}¢ = {pnl_sign}${pnl:.2f}")
+                else:
+                    lines.append(f"  {pnl_emoji} {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+            
+            if len(trades) > 10:
+                lines.append(f"  ... and {len(trades) - 10} more trades")
+        
+        # Calculate totals
+        total_pnl = sum(sum(float(t.get("realized_pnl", 0.0)) for t in trades) for trades in hourly_trades.values())
+        total_emoji = "✅" if total_pnl >= 0 else "❌"
+        total_sign = "+" if total_pnl >= 0 else ""
+        
+        lines.append(f"\n{total_emoji} *Today Total:* {total_sign}${total_pnl:.2f}")
+        
+        message = "\n".join(lines)
+        
+        # Telegram has a 4096 character limit, split if needed
+        if len(message) > 4000:
+            # Split into multiple messages
+            parts = []
+            current_part = ["💰 *Detailed PnL Breakdown - Today*\n"]
+            
+            for line in lines[1:]:  # Skip header
+                if len("\n".join(current_part + [line])) > 4000:
+                    parts.append("\n".join(current_part))
+                    current_part = [line]
+                else:
+                    current_part.append(line)
+            
+            if current_part:
+                parts.append("\n".join(current_part))
+            
+            for part in parts:
+                if update.message:
+                    await update.message.reply_text(part, parse_mode='Markdown')
+        else:
+            if update.message:
+                await update.message.reply_text(message, parse_mode='Markdown')
+    
+    async def _handle_full_pnl_1hour(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /fullpnl1hour command - show detailed breakdown of previous hour's PnL."""
+        if not update.effective_chat:
+            return
+        chat_id = update.effective_chat.id
+        self.active_chats.add(chat_id)
+        tracker = self.get_user_tracker(chat_id)
+        
+        # Calculate previous hour (the hour that just ended)
+        now = datetime.now()
+        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+        hour_start = current_hour_start - timedelta(hours=1)  # Previous hour
+        hour_end = current_hour_start  # End of previous hour
+        start_timestamp = int(hour_start.timestamp())
+        end_timestamp = int(hour_end.timestamp())
+        
+        # Get all closed positions from previous hour
+        with tracker._lock:
+            closed_this_hour = [
+                entry for entry in tracker.closed_positions
+                if start_timestamp <= entry.get("closed_at", 0) < end_timestamp
+            ]
+        
+        # Categorize closed positions
+        trading_trades = []  # Regular closes
+        hedging_trades = []  # Hedges
+        closing_trades = []  # End-of-hour closes (if any)
+        
+        trading_profit = 0.0
+        hedging_profit = 0.0
+        closing_profit = 0.0
+        
+        for entry in closed_this_hour:
+            pnl = float(entry.get("realized_pnl", 0.0))
+            close_type = entry.get("type", "CLOSE")
+            
+            if close_type in ("HEDGE_CLOSE", "PARTIAL_HEDGE"):
+                hedging_trades.append(entry)
+                hedging_profit += pnl
+            elif close_type in ("FULL_CLOSE", "PARTIAL_CLOSE", "REVERSED"):
+                trading_trades.append(entry)
+                trading_profit += pnl
+            else:
+                # Default to trading profit for unknown types
+                trading_trades.append(entry)
+                trading_profit += pnl
+        
+        # Get resolved positions from previous hour
+        resolution_pnl = 0.0
+        resolved_trades = []
+        with tracker._lock:
+            for entry in tracker.resolved_positions:
+                resolved_at = entry.get("resolved_at", 0)
+                if isinstance(resolved_at, float):
+                    resolved_at = int(resolved_at)
+                if start_timestamp <= resolved_at < end_timestamp:
+                    pnl = float(entry.get("realized_pnl", 0.0))
+                    resolution_pnl += pnl
+                    resolved_trades.append(entry)
+        
+        # Calculate unrealized PnL from positions that were open at end of previous hour
+        # (positions opened before or during previous hour but still open)
+        total_unrealized = 0.0
+        open_positions_detail = []
+        
+        with tracker._lock:
+            open_positions = tracker.open_positions.copy()
+        
+        # Filter positions that existed at end of previous hour
+        positions_at_hour_end = {}
+        for token_id, pos in open_positions.items():
+            opened_at = pos.get("opened_at", pos.get("last_update", 0))
+            if opened_at < end_timestamp:  # Position existed at end of previous hour
+                positions_at_hour_end[token_id] = pos
+        
+        if positions_at_hour_end:
+            # Fetch current prices for these positions
+            token_ids = list(positions_at_hour_end.keys())
+            from polymarket_copy_bot import get_market_prices
+            all_prices = get_market_prices(token_ids)
+            
+            # Calculate unrealized PnL
+            current_prices = {}
+            for token_id in token_ids:
+                if token_id in all_prices:
+                    prices = all_prices[token_id]
+                    buy_price = prices.get("BUY", 0.0)
+                    sell_price = prices.get("SELL", 0.0)
+                    current_price = buy_price if buy_price > 0 else sell_price
+                    if current_price > 0:
+                        current_prices[token_id] = current_price
+            
+            if current_prices:
+                pnl_data = tracker.calculate_unrealized_pnl(current_prices)
+                total_unrealized = pnl_data["total_unrealized_pnl"]
+                open_positions_detail = pnl_data["positions"]
+        
+        # Calculate totals
+        total_closed = trading_profit + hedging_profit + closing_profit + resolution_pnl
+        total_pnl = total_closed + total_unrealized
+        
+        # Build detailed message
+        hour_str = hour_start.strftime("%I:%M %p")
+        hour_end_str = hour_end.strftime("%I:%M %p")
+        
+        lines = [
+            f"💰 *Full PnL Breakdown - Previous Hour*\n",
+            f"⏰ {hour_str} - {hour_end_str}\n",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        ]
+        
+        # 1. Trading Profits Breakdown
+        lines.append(f"📈 *Trading Profits* ({len(trading_trades)} trades):\n")
+        if trading_trades:
+            for idx, trade in enumerate(trading_trades[:10], 1):  # Show first 10
+                outcome = trade.get("outcome", "Unknown")
+                size = trade.get("size", 0.0)
+                entry_price = trade.get("entry_price", 0.0)
+                exit_price = trade.get("exit_price", 0.0)
+                pnl = trade.get("realized_pnl", 0.0)
+                close_type = trade.get("type", "CLOSE")
+                
+                pnl_emoji = "✅" if pnl >= 0 else "❌"
+                pnl_sign = "+" if pnl >= 0 else ""
+                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                
+                lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+            
+            if len(trading_trades) > 10:
+                lines.append(f"   ... and {len(trading_trades) - 10} more trades")
+        else:
+            lines.append("   No trading trades")
+        
+        trading_emoji = "✅" if trading_profit >= 0 else "❌"
+        trading_sign = "+" if trading_profit >= 0 else ""
+        lines.append(f"\n   💰 *Subtotal:* {trading_emoji} {trading_sign}${trading_profit:.2f}\n")
+        
+        # 2. Hedging Profits Breakdown
+        lines.append(f"🔄 *Hedging Profits* ({len(hedging_trades)} hedges):\n")
+        if hedging_trades:
+            for idx, trade in enumerate(hedging_trades[:10], 1):  # Show first 10
+                outcome = trade.get("outcome", "Unknown")
+                size = trade.get("size", 0.0)
+                entry_price = trade.get("entry_price", 0.0)
+                exit_price = trade.get("exit_price", 0.0)
+                pnl = trade.get("realized_pnl", 0.0)
+                close_type = trade.get("type", "HEDGE")
+                
+                pnl_emoji = "✅" if pnl >= 0 else "❌"
+                pnl_sign = "+" if pnl >= 0 else ""
+                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                
+                # Parse outcome to show both sides if it's a hedge
+                if "→" in outcome:
+                    parts = outcome.split("→")
+                    lines.append(f"   {idx}. {close_type}: {size:.1f} {parts[0].strip()}→{parts[1].strip()} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                else:
+                    lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+            
+            if len(hedging_trades) > 10:
+                lines.append(f"   ... and {len(hedging_trades) - 10} more hedges")
+        else:
+            lines.append("   No hedging trades")
+        
+        hedging_emoji = "✅" if hedging_profit >= 0 else "❌"
+        hedging_sign = "+" if hedging_profit >= 0 else ""
+        lines.append(f"\n   💰 *Subtotal:* {hedging_emoji} {hedging_sign}${hedging_profit:.2f}\n")
+        
+        # Initialize signs for optional sections
+        closing_sign = "+" if closing_profit >= 0 else ""
+        resolution_sign = "+" if resolution_pnl >= 0 else ""
+        
+        # 3. Closing Profits Breakdown (if any)
+        if closing_profit != 0 or closing_trades:
+            lines.append(f"📉 *Closing Profits* ({len(closing_trades)} closes):\n")
+            if closing_trades:
+                for idx, trade in enumerate(closing_trades[:10], 1):
+                    outcome = trade.get("outcome", "Unknown")
+                    size = trade.get("size", 0.0)
+                    entry_price = trade.get("entry_price", 0.0)
+                    exit_price = trade.get("exit_price", 0.0)
+                    pnl = trade.get("realized_pnl", 0.0)
+                    
+                    pnl_emoji = "✅" if pnl >= 0 else "❌"
+                    pnl_sign = "+" if pnl >= 0 else ""
+                    entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                    exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                    
+                    lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                
+                if len(closing_trades) > 10:
+                    lines.append(f"   ... and {len(closing_trades) - 10} more closes")
+            else:
+                lines.append("   No closing trades")
+            
+            closing_emoji = "✅" if closing_profit >= 0 else "❌"
+            closing_sign = "+" if closing_profit >= 0 else ""
+            lines.append(f"\n   💰 *Subtotal:* {closing_emoji} {closing_sign}${closing_profit:.2f}\n")
+        
+        # 4. Resolved Positions (if any)
+        if resolution_pnl != 0 or resolved_trades:
+            lines.append(f"🎯 *Resolved Markets* ({len(resolved_trades)} resolutions):\n")
+            if resolved_trades:
+                for idx, trade in enumerate(resolved_trades[:10], 1):
+                    outcome = trade.get("outcome", "Unknown")
+                    size = trade.get("size", 0.0)
+                    entry_price = trade.get("entry_price", 0.0)
+                    resolved_price = trade.get("resolved_price", 0.0)
+                    pnl = trade.get("realized_pnl", 0.0)
+                    
+                    pnl_emoji = "✅" if pnl >= 0 else "❌"
+                    pnl_sign = "+" if pnl >= 0 else ""
+                    entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                    resolved_cents = int(resolved_price * 100) if resolved_price > 0 else 0
+                    
+                    lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{resolved_cents}¢ = {pnl_sign}${pnl:.2f}")
+                
+                if len(resolved_trades) > 10:
+                    lines.append(f"   ... and {len(resolved_trades) - 10} more resolutions")
+            else:
+                lines.append("   No resolved markets")
+            
+            resolution_emoji = "✅" if resolution_pnl >= 0 else "❌"
+            resolution_sign = "+" if resolution_pnl >= 0 else ""
+            lines.append(f"\n   💰 *Subtotal:* {resolution_emoji} {resolution_sign}${resolution_pnl:.2f}\n")
+        
+        # 5. Summary of Closed Trades
+        lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        lines.append(f"📊 *Closed Trades Summary:*\n")
+        lines.append(f"   📈 Trading: {trading_sign}${trading_profit:.2f}\n")
+        lines.append(f"   🔄 Hedging: {hedging_sign}${hedging_profit:.2f}\n")
+        if closing_profit != 0:
+            lines.append(f"   📉 Closing: {closing_sign}${closing_profit:.2f}\n")
+        if resolution_pnl != 0:
+            lines.append(f"   🎯 Resolved: {resolution_sign}${resolution_pnl:.2f}\n")
+        
+        total_closed_emoji = "✅" if total_closed >= 0 else "❌"
+        total_closed_sign = "+" if total_closed >= 0 else ""
+        lines.append(f"   ━━━━━━━━━━━━━━━━━━━━\n")
+        lines.append(f"   💰 *Total Closed:* {total_closed_emoji} {total_closed_sign}${total_closed:.2f}\n\n")
+        
+        # 6. Open Positions (Unrealized)
+        lines.append(f"🎲 *Open Positions (Unrealized)* ({len(open_positions_detail)} positions):\n")
+        if open_positions_detail:
+            sorted_positions = sorted(open_positions_detail, key=lambda x: abs(x["unrealized_pnl"]), reverse=True)
+            for idx, pos in enumerate(sorted_positions[:10], 1):  # Show top 10
+                coin = pos["coin_name"]
+                outcome = pos["outcome"]
+                size = pos["size"]
+                entry_price = pos["entry_price"]
+                current_price = pos["current_price"]
+                unrealized = pos["unrealized_pnl"]
+                
+                pos_emoji = "✅" if unrealized >= 0 else "❌"
+                pos_sign = "+" if unrealized >= 0 else ""
+                direction = "🟢" if size > 0 else "🔴"
+                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                current_cents = int(current_price * 100) if current_price > 0 else 0
+                
+                lines.append(f"   {idx}. {coin} {outcome}: {direction} {abs(size):.1f} @ {entry_cents}¢→{current_cents}¢ = {pos_sign}${unrealized:.2f}")
+            
+            if len(sorted_positions) > 10:
+                lines.append(f"   ... and {len(sorted_positions) - 10} more positions")
+        else:
+            lines.append("   No open positions")
+        
+        unrealized_emoji = "✅" if total_unrealized >= 0 else "❌"
+        unrealized_sign = "+" if total_unrealized >= 0 else ""
+        lines.append(f"\n   💰 *Subtotal:* {unrealized_emoji} {unrealized_sign}${total_unrealized:.2f}\n")
+        
+        # 7. Final Total
+        lines.append(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        total_emoji = "✅" if total_pnl >= 0 else "❌"
+        total_sign = "+" if total_pnl >= 0 else ""
+        lines.append(f"💰 *Final Total PnL:* {total_emoji} {total_sign}${total_pnl:.2f}\n")
+        lines.append(f"   = Closed ({total_closed_sign}${total_closed:.2f}) + Unrealized ({unrealized_sign}${total_unrealized:.2f})")
+        
+        message = "\n".join(lines)
+        
+        # Split message if too long (Telegram limit is 4096 chars)
+        if len(message) > 4000:
+            # Split into parts
+            parts = []
+            current_part = []
+            current_length = 0
+            
+            for line in lines:
+                line_length = len(line) + 1  # +1 for newline
+                if current_length + line_length > 4000:
+                    if current_part:
+                        parts.append("\n".join(current_part))
+                    current_part = [line]
+                    current_length = line_length
+                else:
+                    current_part.append(line)
+                    current_length += line_length
+            
+            if current_part:
+                parts.append("\n".join(current_part))
+            
+            for part in parts:
+                if update.message:
+                    await update.message.reply_text(part, parse_mode='Markdown')
+        else:
+            if update.message:
+                await update.message.reply_text(message, parse_mode='Markdown')
+    
     async def _handle_money(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /money command - show volume and max trade for current hour."""
         if not update.effective_chat:
@@ -2079,8 +2565,34 @@ class TelegramNotifier:
                 tracker = self.get_user_tracker(chat_id)
                 
                 # 1. Calculate realized PnL from trades (closed positions) in this hour
+                # Separate by type: trading profits, hedging profits, closing profits
                 stats = tracker.get_hourly_stats(start_timestamp, end_timestamp)
-                traded_profit = stats.get('pnl', 0.0)  # Realized PnL from closed trades
+                
+                # Get all closed positions for this hour and categorize them
+                trading_profit = 0.0  # Regular closes (FULL_CLOSE, PARTIAL_CLOSE, REVERSED)
+                hedging_profit = 0.0  # Hedges (HEDGE_CLOSE, PARTIAL_HEDGE)
+                closing_profit = 0.0  # Positions closed at end of hour (if any)
+                
+                with tracker._lock:
+                    closed_this_hour = [
+                        entry for entry in tracker.closed_positions
+                        if start_timestamp <= entry.get("closed_at", 0) < end_timestamp
+                    ]
+                
+                for entry in closed_this_hour:
+                    pnl = float(entry.get("realized_pnl", 0.0))
+                    close_type = entry.get("type", "CLOSE")
+                    
+                    if close_type in ("HEDGE_CLOSE", "PARTIAL_HEDGE"):
+                        hedging_profit += pnl
+                    elif close_type in ("FULL_CLOSE", "PARTIAL_CLOSE", "REVERSED"):
+                        trading_profit += pnl
+                    else:
+                        # Default to trading profit for unknown types
+                        trading_profit += pnl
+                
+                # Total traded profit (all closed positions)
+                traded_profit = trading_profit + hedging_profit + closing_profit
                 
                 # 2. Check for resolved markets and apply resolutions with resolved prices
                 resolution_pnl = 0.0
@@ -2228,6 +2740,16 @@ class TelegramNotifier:
                 hour_str = hour_start.strftime("%I:%M %p")
                 hour_end_str = hour_end.strftime("%I:%M %p")
                 
+                # Format emojis and signs for each category
+                trading_emoji = "✅" if trading_profit >= 0 else "❌"
+                trading_sign = "+" if trading_profit >= 0 else ""
+                
+                hedging_emoji = "✅" if hedging_profit >= 0 else "❌"
+                hedging_sign = "+" if hedging_profit >= 0 else ""
+                
+                closing_emoji = "✅" if closing_profit >= 0 else "❌"
+                closing_sign = "+" if closing_profit >= 0 else ""
+                
                 traded_emoji = "✅" if traded_profit >= 0 else "❌"
                 traded_sign = "+" if traded_profit >= 0 else ""
                 
@@ -2240,8 +2762,14 @@ class TelegramNotifier:
                 message = (
                     f"💰 *End-of-Hour PnL Summary*\n"
                     f"⏰ {hour_str} - {hour_end_str}\n\n"
-                    f"📈 *Traded Profit:* {traded_emoji} {traded_sign}${traded_profit:.2f}\n"
-                    f"🎲 *Polymarket Bet PnL:* {unrealized_emoji} {unrealized_sign}${total_unrealized:.2f}\n"
+                    f"📊 *Closed Trades PnL:*\n"
+                    f"   📈 Trading Profit: {trading_emoji} {trading_sign}${trading_profit:.2f}\n"
+                    f"   🔄 Hedging Profit: {hedging_emoji} {hedging_sign}${hedging_profit:.2f}\n"
+                    f"   📉 Closing Profit: {closing_emoji} {closing_sign}${closing_profit:.2f}\n"
+                    f"   ━━━━━━━━━━━━━━━━━━━━\n"
+                    f"   💰 Total Closed: {traded_emoji} {traded_sign}${traded_profit:.2f}\n\n"
+                    f"🎲 *Open Positions (Unrealized):*\n"
+                    f"   💵 Polymarket Bet PnL: {unrealized_emoji} {unrealized_sign}${total_unrealized:.2f}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"💰 *Total PnL:* {total_emoji} {total_sign}${total_pnl:.2f}\n\n"
                 )
@@ -2922,7 +3450,7 @@ class TelegramNotifier:
                             resolved_price = down_price
                         else:
                             # Equal prices - default to Up
-                            winning_outcome = "Up"
+                                winning_outcome = "Up"
                             resolved_price = up_price
                         
                         up_price_cents = int(up_price * 100)
@@ -2948,13 +3476,13 @@ class TelegramNotifier:
                             winning_outcome = "Up"
                             resolved_price = up_price
                             up_price_cents = int(up_price * 100)
-                            market_log_entry["final_prices"] = {
+                        market_log_entry["final_prices"] = {
                                 "up_price": up_price,
-                                "up_price_cents": up_price_cents,
-                                "down_price": 0.0,
-                                "down_price_cents": 0,
-                                "winner": winning_outcome,
-                                "winner_price_cents": up_price_cents,
+                            "up_price_cents": up_price_cents,
+                            "down_price": 0.0,
+                            "down_price_cents": 0,
+                            "winner": winning_outcome,
+                            "winner_price_cents": up_price_cents,
                                 "loser_price_cents": 0,
                                 "resolved_price": resolved_price
                             }
@@ -2964,16 +3492,16 @@ class TelegramNotifier:
                             winning_outcome = "Down"
                             resolved_price = down_price
                             down_price_cents = int(down_price * 100)
-                            market_log_entry["final_prices"] = {
-                                "up_price": 0.0,
-                                "up_price_cents": 0,
+                        market_log_entry["final_prices"] = {
+                            "up_price": 0.0,
+                            "up_price_cents": 0,
                                 "down_price": down_price,
-                                "down_price_cents": down_price_cents,
-                                "winner": winning_outcome,
-                                "winner_price_cents": down_price_cents,
+                            "down_price_cents": down_price_cents,
+                            "winner": winning_outcome,
+                            "winner_price_cents": down_price_cents,
                                 "loser_price_cents": 0,
                                 "resolved_price": resolved_price
-                            }
+                        }
                     else:
                         logger.warning(f"⚠️  Could not fetch prices for {market_id}, skipping resolution")
                         resolution_log["markets_checked"].append(market_log_entry)
@@ -5661,7 +6189,7 @@ def print_banner(
         for i, wallet in enumerate(TARGET_WALLETS, 1):
             logger.info(f"    {i}. {wallet}")
     else:
-        logger.info(f"  Target Wallet: {target_wallet}")
+    logger.info(f"  Target Wallet: {target_wallet}")
     if ALLOWED_MARKET_IDS:
         logger.info(f"  Allowed Markets: {len(ALLOWED_MARKET_IDS)} market ID(s)")
     else:
