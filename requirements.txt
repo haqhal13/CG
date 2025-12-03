@@ -1,17 +1,9 @@
-# Polymarket Copy Trading Bot Dependencies
-
-# HTTP requests for Data API
 requests>=2.31.0
-
-# Polymarket CLOB Python client (will be used for order placement)
-# https://github.com/Polymarket/py-clob-client
 py-clob-client>=0.1.0
-
-# Web3 for Ethereum/Polygon interactions (if needed)
-web3>=6.0.0
-
-# Python-dotenv for environment variables (API keys, private keys)
 python-dotenv>=1.0.0
+python-telegram-bot>=20.0
+web3>=6.0.0
+pytz>=2023.3
+tzlocal>=5.0
+python-dateutil>=2.8.0
 
-# Telegram notifications and command handling
-python-telegram-bot>=13.15,<14.0
