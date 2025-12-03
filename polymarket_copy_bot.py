@@ -399,6 +399,7 @@ class PositionTracker:
         self.trade_history: List[Dict] = trade_history or []  # Track all trades for volume calculation
         self.resolved_positions: List[Dict] = resolved_positions or []  # Track resolved market positions
         self.daily_hourly_pnl: Dict[str, Dict] = daily_hourly_pnl or {}  # {date: {hour: pnl}}
+        self.peak_concurrent_exposure_lifetime: float = 0.0  # Track lifetime peak concurrent exposure
         self._lock = threading.RLock()
     
     def save_to_file(self, filepath: Path) -> None:
@@ -442,7 +443,8 @@ class PositionTracker:
                     "realized_pnl": self.realized_pnl,
                     "trade_history": self.trade_history,
                     "resolved_positions": self.resolved_positions,
-                    "daily_hourly_pnl": cleaned_daily_pnl
+                    "daily_hourly_pnl": cleaned_daily_pnl,
+                    "peak_concurrent_exposure_lifetime": self.peak_concurrent_exposure_lifetime
                 }
             with open(filepath, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -658,7 +660,7 @@ class PositionTracker:
                             realized_pnl=locked_pnl
                         ))
                         return events
-                
+            
                 # INCREASE: BUY same outcome when we already have position
                 if pos_before > 0 and existing:
                     # Add to existing position
@@ -712,7 +714,7 @@ class PositionTracker:
                     payload=new_position.copy()
                 ))
                 return events
-            
+
             # SELL trades: can only close/reduce existing positions
             elif trade.side == "SELL":
                 if pos_before == 0 or existing is None:
@@ -790,6 +792,15 @@ class PositionTracker:
                 ))
                 return events
             
+            # Update lifetime peak concurrent exposure after position changes
+            current_exposure = sum(
+                abs(float(pos.get("qty", pos.get("net_size", 0.0)))) * float(pos.get("avg_entry_price", 0.0))
+                for pos in self.open_positions.values()
+            )
+            if current_exposure > self.peak_concurrent_exposure_lifetime:
+                self.peak_concurrent_exposure_lifetime = current_exposure
+                logger.debug(f"📈 New lifetime peak concurrent exposure: ${self.peak_concurrent_exposure_lifetime:.2f}")
+            
             # Should not reach here
             logger.warning(f"⚠️  Unhandled trade: side={trade.side}, token_id={trade.token_id}")
             return events
@@ -858,6 +869,7 @@ class PositionTracker:
                 outcome = pos.get("outcome", "Unknown")
                 coin_name = pos.get("coin_name", "Unknown")
                 title = pos.get("title", "Unknown Market")
+                market_id = pos.get("market_id", "")
                 
                 if abs(size) < POSITION_EPSILON or entry_price <= 0:
                     continue
@@ -888,7 +900,8 @@ class PositionTracker:
                     "size": size,
                     "entry_price": entry_price,
                     "current_price": current_price,
-                    "unrealized_pnl": unrealized_pnl
+                    "unrealized_pnl": unrealized_pnl,
+                    "market_id": market_id  # Include market_id for filtering resolved markets
                 })
             
             return {
@@ -1376,6 +1389,15 @@ class TelegramNotifier:
                     name="end_of_hour_pnl"
                 )
                 logger.info(f"Scheduled end-of-hour PnL calculation at :59:59. First calculation in {int(seconds_until_end_of_hour)}s")
+                
+                # Schedule price snapshot saving (runs at :59:59 - same time as PnL calculation)
+                job_queue.run_repeating(
+                    self._save_hourly_price_snapshot,
+                    interval=3600,  # Every hour
+                    first=seconds_until_end_of_hour,
+                    name="save_price_snapshot"
+                )
+                logger.info(f"Scheduled hourly price snapshot saving at :59:59. First snapshot in {int(seconds_until_end_of_hour)}s")
             
             # Start polling in background thread
             def start_polling():
@@ -1912,7 +1934,10 @@ class TelegramNotifier:
         # Get hourly stats (same method used by /backfill)
         stats = tracker.get_hourly_stats(start_timestamp, end_timestamp)
         hourly_pnl = stats['pnl']
-        peak_concurrent_exposure = stats.get('peak_concurrent_exposure', 0.0)
+        peak_concurrent_exposure_hourly = stats.get('peak_concurrent_exposure', 0.0)
+        
+        # Get lifetime peak concurrent exposure
+        peak_concurrent_exposure_lifetime = tracker.peak_concurrent_exposure_lifetime
         
         # Record this hour's PnL for today's tracking
         tracker.record_hourly_pnl(hour_start, hourly_pnl)
@@ -1924,10 +1949,23 @@ class TelegramNotifier:
         closed_count = len(tracker.snapshot_closed_positions(limit=0))
         
         # Calculate current/live concurrent exposure from open positions
-        live_concurrent_exposure = sum(
-            abs(float(pos.get("net_size", 0.0))) * float(pos.get("avg_entry_price", 0.0))
-            for pos in open_positions
-        )
+        # Use qty if available (new format), fallback to net_size (old format)
+        live_concurrent_exposure = 0.0
+        for pos in open_positions:
+            size = abs(float(pos.get("qty", pos.get("net_size", 0.0))))
+            entry_price = float(pos.get("avg_entry_price", 0.0))
+            live_concurrent_exposure += size * entry_price
+        
+        # Update lifetime peak if current exposure or hourly peak is higher
+        if live_concurrent_exposure > peak_concurrent_exposure_lifetime:
+            tracker.peak_concurrent_exposure_lifetime = live_concurrent_exposure
+            peak_concurrent_exposure_lifetime = live_concurrent_exposure
+            self.save_user_tracker(chat_id)
+        
+        if peak_concurrent_exposure_hourly > peak_concurrent_exposure_lifetime:
+            tracker.peak_concurrent_exposure_lifetime = peak_concurrent_exposure_hourly
+            peak_concurrent_exposure_lifetime = peak_concurrent_exposure_hourly
+            self.save_user_tracker(chat_id)
         
         # Get closed positions this hour (within the hour range)
         closed_this_hour = []
@@ -1954,7 +1992,7 @@ class TelegramNotifier:
                    f"hourly_pnl={hourly_pnl:.2f}, stats_trades={stats['trade_count']}, "
                    f"closed_this_hour={len(closed_this_hour)}, "
                    f"total_closed={closed_count}, open_positions={len(open_positions)}, "
-                   f"peak_exposure={peak_concurrent_exposure:.2f}, live_exposure={live_concurrent_exposure:.2f}")
+                   f"peak_exposure_hourly={peak_concurrent_exposure_hourly:.2f}, peak_exposure_lifetime={peak_concurrent_exposure_lifetime:.2f}, live_exposure={live_concurrent_exposure:.2f}")
         
         message = (
             f"💰 Profit & Loss - Current Hour\n"
@@ -1963,7 +2001,7 @@ class TelegramNotifier:
             f"📊 Trades This Hour: {stats['trade_count']}\n"
             f"📉 Closed Positions: {len(closed_this_hour)}\n"
             f"💰 Volume: ${stats['volume']:.2f}\n\n"
-            f"💎 Peak Concurrent Exposure: ${peak_concurrent_exposure:.2f}\n"
+            f"💎 Peak Concurrent Exposure (Lifetime): ${peak_concurrent_exposure_lifetime:.2f}\n"
             f"💎 Live Concurrent Exposure: ${live_concurrent_exposure:.2f}\n\n"
             f"📈 Open Positions: {len(open_positions)}\n"
             f"📉 Total Closed Trades: {closed_count}\n\n"
@@ -2138,313 +2176,704 @@ class TelegramNotifier:
                 await update.message.reply_text(message, parse_mode='Markdown')
     
     async def _handle_full_pnl_1hour(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /fullpnl1hour command - show detailed breakdown of previous hour's PnL."""
-        if not update.effective_chat:
+        """Handle /fullpnl1hour command - show detailed breakdown of previous hour's PnL.
+        Performs a full rescan of resolved markets during that hour."""
+        if not update.effective_chat or not update.message:
             return
         chat_id = update.effective_chat.id
         self.active_chats.add(chat_id)
         tracker = self.get_user_tracker(chat_id)
         
-        # Calculate previous hour (the hour that just ended)
-        now = datetime.now()
-        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-        hour_start = current_hour_start - timedelta(hours=1)  # Previous hour
-        hour_end = current_hour_start  # End of previous hour
-        start_timestamp = int(hour_start.timestamp())
-        end_timestamp = int(hour_end.timestamp())
+        # Send "processing" message
+        processing_msg = None
+        try:
+            processing_msg = await update.message.reply_text("⏳ Scanning previous hour and checking for resolved markets...", parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Failed to send processing message: {e}")
         
-        # Get all closed positions from previous hour
-        with tracker._lock:
-            closed_this_hour = [
-                entry for entry in tracker.closed_positions
-                if start_timestamp <= entry.get("closed_at", 0) < end_timestamp
-            ]
-        
-        # Categorize closed positions
-        trading_trades = []  # Regular closes
-        hedging_trades = []  # Hedges
-        closing_trades = []  # End-of-hour closes (if any)
-        
-        trading_profit = 0.0
-        hedging_profit = 0.0
-        closing_profit = 0.0
-        
-        for entry in closed_this_hour:
-            pnl = float(entry.get("realized_pnl", 0.0))
-            close_type = entry.get("type", "CLOSE")
+        try:
+            # Calculate previous hour (the hour that just ended)
+            now = datetime.now()
+            current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+            hour_start = current_hour_start - timedelta(hours=1)  # Previous hour
+            hour_end = current_hour_start  # End of previous hour
+            start_timestamp = int(hour_start.timestamp())
+            end_timestamp = int(hour_end.timestamp())
             
-            if close_type in ("HEDGE_CLOSE", "PARTIAL_HEDGE"):
-                hedging_trades.append(entry)
-                hedging_profit += pnl
-            elif close_type in ("FULL_CLOSE", "PARTIAL_CLOSE", "REVERSED"):
-                trading_trades.append(entry)
-                trading_profit += pnl
-            else:
-                # Default to trading profit for unknown types
-                trading_trades.append(entry)
-                trading_profit += pnl
-        
-        # Get resolved positions from previous hour
-        resolution_pnl = 0.0
-        resolved_trades = []
-        with tracker._lock:
-            for entry in tracker.resolved_positions:
-                resolved_at = entry.get("resolved_at", 0)
-                if isinstance(resolved_at, float):
-                    resolved_at = int(resolved_at)
-                if start_timestamp <= resolved_at < end_timestamp:
-                    pnl = float(entry.get("realized_pnl", 0.0))
-                    resolution_pnl += pnl
-                    resolved_trades.append(entry)
-        
-        # Calculate unrealized PnL from positions that were open at end of previous hour
-        # (positions opened before or during previous hour but still open)
-        total_unrealized = 0.0
-        open_positions_detail = []
-        
-        with tracker._lock:
-            open_positions = tracker.open_positions.copy()
-        
-        # Filter positions that existed at end of previous hour
-        positions_at_hour_end = {}
-        for token_id, pos in open_positions.items():
-            opened_at = pos.get("opened_at", pos.get("last_update", 0))
-            if opened_at < end_timestamp:  # Position existed at end of previous hour
-                positions_at_hour_end[token_id] = pos
-        
-        if positions_at_hour_end:
-            # Fetch current prices for these positions
-            token_ids = list(positions_at_hour_end.keys())
-            from polymarket_copy_bot import get_market_prices
-            all_prices = get_market_prices(token_ids)
+            logger.info(f"📊 /fullpnl1hour: Scanning {hour_start.strftime('%I:%M %p')} - {hour_end.strftime('%I:%M %p')}")
             
-            # Calculate unrealized PnL
-            current_prices = {}
-            for token_id in token_ids:
-                if token_id in all_prices:
-                    prices = all_prices[token_id]
-                    buy_price = prices.get("BUY", 0.0)
-                    sell_price = prices.get("SELL", 0.0)
-                    current_price = buy_price if buy_price > 0 else sell_price
-                    if current_price > 0:
-                        current_prices[token_id] = current_price
+            # Update progress message
+            try:
+                if processing_msg:
+                    await processing_msg.edit_text("⏳ Step 1/5: Loading closed positions...", parse_mode='Markdown')
+            except:
+                pass
             
-            if current_prices:
-                pnl_data = tracker.calculate_unrealized_pnl(current_prices)
-                total_unrealized = pnl_data["total_unrealized_pnl"]
-                open_positions_detail = pnl_data["positions"]
-        
-        # Calculate totals
-        total_closed = trading_profit + hedging_profit + closing_profit + resolution_pnl
-        total_pnl = total_closed + total_unrealized
-        
-        # Build detailed message
-        hour_str = hour_start.strftime("%I:%M %p")
-        hour_end_str = hour_end.strftime("%I:%M %p")
-        
-        lines = [
-            f"💰 *Full PnL Breakdown - Previous Hour*\n",
-            f"⏰ {hour_str} - {hour_end_str}\n",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        ]
-        
-        # 1. Trading Profits Breakdown
-        lines.append(f"📈 *Trading Profits* ({len(trading_trades)} trades):\n")
-        if trading_trades:
-            for idx, trade in enumerate(trading_trades[:10], 1):  # Show first 10
-                outcome = trade.get("outcome", "Unknown")
-                size = trade.get("size", 0.0)
-                entry_price = trade.get("entry_price", 0.0)
-                exit_price = trade.get("exit_price", 0.0)
-                pnl = trade.get("realized_pnl", 0.0)
-                close_type = trade.get("type", "CLOSE")
-                
-                pnl_emoji = "✅" if pnl >= 0 else "❌"
-                pnl_sign = "+" if pnl >= 0 else ""
-                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
-                exit_cents = int(exit_price * 100) if exit_price > 0 else 0
-                
-                lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+            # Get all closed positions from previous hour
+            with tracker._lock:
+                closed_this_hour = [
+                    entry for entry in tracker.closed_positions
+                    if start_timestamp <= entry.get("closed_at", 0) < end_timestamp
+                ]
             
-            if len(trading_trades) > 10:
-                lines.append(f"   ... and {len(trading_trades) - 10} more trades")
-        else:
-            lines.append("   No trading trades")
-        
-        trading_emoji = "✅" if trading_profit >= 0 else "❌"
-        trading_sign = "+" if trading_profit >= 0 else ""
-        lines.append(f"\n   💰 *Subtotal:* {trading_emoji} {trading_sign}${trading_profit:.2f}\n")
-        
-        # 2. Hedging Profits Breakdown
-        lines.append(f"🔄 *Hedging Profits* ({len(hedging_trades)} hedges):\n")
-        if hedging_trades:
-            for idx, trade in enumerate(hedging_trades[:10], 1):  # Show first 10
-                outcome = trade.get("outcome", "Unknown")
-                size = trade.get("size", 0.0)
-                entry_price = trade.get("entry_price", 0.0)
-                exit_price = trade.get("exit_price", 0.0)
-                pnl = trade.get("realized_pnl", 0.0)
-                close_type = trade.get("type", "HEDGE")
+            logger.info(f"📊 Found {len(closed_this_hour)} closed positions in this hour")
+            
+            # Update progress message
+            try:
+                if processing_msg:
+                    await processing_msg.edit_text(f"⏳ Step 2/5: Categorizing {len(closed_this_hour)} trades...", parse_mode='Markdown')
+            except:
+                pass
+            
+            # Categorize closed positions
+            trading_trades = []  # Regular closes
+            hedging_trades = []  # Hedges
+            closing_trades = []  # End-of-hour closes (if any)
+            
+            trading_profit = 0.0
+            hedging_profit = 0.0
+            closing_profit = 0.0
+            
+            for entry in closed_this_hour:
+                pnl = float(entry.get("realized_pnl", 0.0))
+                close_type = entry.get("type", "CLOSE")
                 
-                pnl_emoji = "✅" if pnl >= 0 else "❌"
-                pnl_sign = "+" if pnl >= 0 else ""
-                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
-                exit_cents = int(exit_price * 100) if exit_price > 0 else 0
-                
-                # Parse outcome to show both sides if it's a hedge
-                if "→" in outcome:
-                    parts = outcome.split("→")
-                    lines.append(f"   {idx}. {close_type}: {size:.1f} {parts[0].strip()}→{parts[1].strip()} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                if close_type in ("HEDGE_CLOSE", "PARTIAL_HEDGE"):
+                    hedging_trades.append(entry)
+                    hedging_profit += pnl
+                elif close_type in ("FULL_CLOSE", "PARTIAL_CLOSE", "REVERSED"):
+                    trading_trades.append(entry)
+                    trading_profit += pnl
                 else:
-                    lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                    # Default to trading profit for unknown types
+                    trading_trades.append(entry)
+                    trading_profit += pnl
             
-            if len(hedging_trades) > 10:
-                lines.append(f"   ... and {len(hedging_trades) - 10} more hedges")
-        else:
-            lines.append("   No hedging trades")
-        
-        hedging_emoji = "✅" if hedging_profit >= 0 else "❌"
-        hedging_sign = "+" if hedging_profit >= 0 else ""
-        lines.append(f"\n   💰 *Subtotal:* {hedging_emoji} {hedging_sign}${hedging_profit:.2f}\n")
-        
-        # Initialize signs for optional sections
-        closing_sign = "+" if closing_profit >= 0 else ""
-        resolution_sign = "+" if resolution_pnl >= 0 else ""
-        
-        # 3. Closing Profits Breakdown (if any)
-        if closing_profit != 0 or closing_trades:
-            lines.append(f"📉 *Closing Profits* ({len(closing_trades)} closes):\n")
-            if closing_trades:
-                for idx, trade in enumerate(closing_trades[:10], 1):
+            # Get resolved positions from previous hour (already recorded)
+            resolution_pnl = 0.0
+            resolved_trades = []
+            resolved_market_ids = set()
+            with tracker._lock:
+                for entry in tracker.resolved_positions:
+                    resolved_at = entry.get("resolved_at", 0)
+                    if isinstance(resolved_at, float):
+                        resolved_at = int(resolved_at)
+                    if start_timestamp <= resolved_at < end_timestamp:
+                        pnl = float(entry.get("realized_pnl", 0.0))
+                        resolution_pnl += pnl
+                        resolved_trades.append(entry)
+                        market_id = entry.get("market_id", "")
+                        if market_id:
+                            resolved_market_ids.add(market_id)
+            
+            # FULL RESCAN: Check ALL markets for resolutions during this hour
+            # This includes both:
+            # 1. Positions that were open at end of hour (need to check if markets resolved)
+            # 2. Markets that resolved but positions were already closed (still need to check)
+            with tracker._lock:
+                open_positions = tracker.open_positions.copy()
+                # Also get all closed positions to check their markets
+                all_closed_positions = tracker.closed_positions.copy()
+            
+            # Find positions that existed at end of previous hour (open positions)
+            positions_at_hour_end = {}
+            for token_id, pos in open_positions.items():
+                opened_at = pos.get("opened_at", pos.get("last_update", 0))
+                if opened_at < end_timestamp:  # Position existed at end of hour
+                    positions_at_hour_end[token_id] = pos
+            
+            # Also collect markets from closed positions during this hour (to check if they resolved)
+            markets_from_closed = {}
+            for entry in closed_this_hour:
+                market_id = entry.get("market_id", "")
+                if market_id and market_id not in resolved_market_ids:
+                    if market_id not in markets_from_closed:
+                        markets_from_closed[market_id] = {
+                            "title": entry.get("title", ""),
+                            "positions": []
+                        }
+            
+            # Group open positions by market_id to check for resolutions
+            markets_with_positions = {}
+            for token_id, pos in positions_at_hour_end.items():
+                market_id = pos.get("market_id", "")
+                if market_id and market_id not in resolved_market_ids:  # Not already resolved
+                    if market_id not in markets_with_positions:
+                        markets_with_positions[market_id] = {
+                            "title": pos.get("title", ""),
+                            "positions": []
+                        }
+                    markets_with_positions[market_id]["positions"].append((token_id, pos))
+            
+            # Merge both sources (open positions and closed positions markets)
+            all_markets_to_check = {}
+            all_markets_to_check.update(markets_with_positions)
+            for market_id, info in markets_from_closed.items():
+                if market_id not in all_markets_to_check:
+                    all_markets_to_check[market_id] = info
+            
+            # Check each market for resolution during this hour
+            from polymarket_copy_bot import get_market_tokens, get_market_prices, parse_resolution_time_from_title
+            
+            logger.info(f"🔍 Checking {len(all_markets_to_check)} markets for resolution during {hour_start.strftime('%I:%M %p')}-{hour_end.strftime('%I:%M %p')}")
+            
+            # Limit to first 50 markets to avoid timeout (most important ones)
+            markets_to_check = dict(list(all_markets_to_check.items())[:50])
+            if len(all_markets_to_check) > 50:
+                logger.warning(f"⚠️  Limiting to first 50 markets (out of {len(all_markets_to_check)}) to avoid timeout")
+            
+            # Update progress message
+            try:
+                if processing_msg:
+                    await processing_msg.edit_text(f"⏳ Step 3/5: Checking {len(markets_to_check)} markets for resolution...", parse_mode='Markdown')
+            except:
+                pass
+            
+            checked_count = 0
+            resolved_count = 0
+            for market_id, market_info in markets_to_check.items():
+                checked_count += 1
+                try:
+                    positions = market_info.get("positions", [])
+                    title = market_info.get("title", "")
+                    
+                    if not title:
+                        # Try to get title from positions
+                        if positions:
+                            title = positions[0][1].get("title", "")
+                        if not title:
+                            logger.warning(f"⚠️  No title for market {market_id}, skipping")
+                            continue
+                    
+                    # Check if market resolved during this hour
+                    resolution_time = parse_resolution_time_from_title(title)
+                    if not resolution_time or not (start_timestamp <= int(resolution_time.timestamp()) < end_timestamp):
+                        # Market didn't resolve during this hour, skip API calls
+                        continue
+                    
+                    logger.info(f"🔍 [{checked_count}/{len(markets_to_check)}] Market {market_id} resolved: {title[:50]}")
+                    
+                    # Get market tokens and fetch prices (with timeout protection)
+                    market_tokens = None
+                    try:
+                        market_tokens = get_market_tokens(market_id)
+                    except Exception as e:
+                        logger.warning(f"⚠️  Failed to get market tokens for {market_id}: {e}")
+                    
+                    if not market_tokens:
+                        # Try to get from positions
+                        if positions:
+                            try:
+                                from polymarket_copy_bot import get_market_tokens_by_token_id
+                                market_tokens = get_market_tokens_by_token_id(positions[0][0])
+                            except Exception as e:
+                                logger.warning(f"⚠️  Failed to get tokens by token_id: {e}")
+                        # If still no tokens, try from closed positions
+                        if not market_tokens:
+                            for entry in closed_this_hour:
+                                if entry.get("market_id") == market_id:
+                                    token_id = entry.get("token_id", "")
+                                    if token_id:
+                                        try:
+                                            from polymarket_copy_bot import get_market_tokens_by_token_id
+                                            market_tokens = get_market_tokens_by_token_id(token_id)
+                                            break
+                                        except Exception as e:
+                                            logger.warning(f"⚠️  Failed to get tokens from closed position: {e}")
+                                            continue
+                    
+                    # Try to get saved prices from snapshot first (more accurate for historical resolution)
+                    up_price = None
+                    down_price = None
+                    winning_outcome = None
+                    resolved_price = None
+                    
+                    if market_tokens:
+                        up_token = market_tokens.get("UP") or market_tokens.get("Up")
+                        down_token = market_tokens.get("DOWN") or market_tokens.get("Down")
+                        
+                        # Try to load saved prices from snapshot (for the hour that just ended)
+                        hour_key = hour_end.strftime("%Y-%m-%d-%H")
+                        price_snapshot_file = Path("price_snapshots.json")
+                        saved_prices_found = False
+                        
+                        if price_snapshot_file.exists():
+                            try:
+                                with open(price_snapshot_file, 'r') as f:
+                                    snapshots = json.load(f)
+                                
+                                if hour_key in snapshots:
+                                    snapshot = snapshots[hour_key]
+                                    snapshot_prices = snapshot.get("prices", {})
+                                    
+                                    if up_token and up_token in snapshot_prices:
+                                        up_price = snapshot_prices[up_token].get("current", 0.0)
+                                        saved_prices_found = True
+                                    
+                                    if down_token and down_token in snapshot_prices:
+                                        down_price = snapshot_prices[down_token].get("current", 0.0)
+                                        saved_prices_found = True
+                                    
+                                    if saved_prices_found:
+                                        logger.info(f"💾 Using saved prices from snapshot {hour_key} for market {market_id}")
+                            except Exception as e:
+                                logger.warning(f"⚠️  Failed to load price snapshot: {e}")
+                        
+                        # Fallback to live prices if snapshot not available
+                        if not saved_prices_found:
+                            token_ids_to_fetch = []
+                            if up_token:
+                                token_ids_to_fetch.append(up_token)
+                            if down_token:
+                                token_ids_to_fetch.append(down_token)
+                            
+                            if token_ids_to_fetch:
+                                try:
+                                    all_prices = get_market_prices(token_ids_to_fetch)
+                                    
+                                    if up_token and up_token in all_prices:
+                                        up_prices = all_prices[up_token]
+                                        up_price = up_prices.get("BUY", 0.0) or up_prices.get("SELL", 0.0)
+                                    
+                                    if down_token and down_token in all_prices:
+                                        down_prices = all_prices[down_token]
+                                        down_price = down_prices.get("BUY", 0.0) or down_prices.get("SELL", 0.0)
+                                    
+                                    logger.info(f"📡 Using live prices (snapshot not available) for market {market_id}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️  Failed to get prices for market {market_id}: {e}")
+                                    continue  # Skip this market if price fetch fails
+                    
+                    # Determine winner: highest price wins
+                    if up_price is not None and down_price is not None:
+                        if up_price > down_price:
+                            winning_outcome = "Up"
+                            resolved_price = up_price
+                        elif down_price > up_price:
+                            winning_outcome = "Down"
+                            resolved_price = down_price
+                        else:
+                            winning_outcome = "Up"
+                            resolved_price = up_price
+                    elif up_price is not None and up_price >= 0.5:
+                        winning_outcome = "Up"
+                        resolved_price = up_price
+                    elif down_price is not None and down_price >= 0.5:
+                        winning_outcome = "Down"
+                        resolved_price = down_price
+                    
+                    if winning_outcome and resolved_price:
+                        # Calculate PnL for each position in this market
+                        resolution_ts = int(resolution_time.timestamp())
+                        
+                        # Process open positions that existed at end of hour
+                        for token_id, pos in positions:
+                            outcome = pos.get("outcome", "")
+                        size = abs(float(pos.get("net_size", pos.get("qty", 0.0))))
+                        entry_price = float(pos.get("avg_entry_price", 0.0))
+                        cost_basis = size * entry_price
+                        
+                        # Determine if this position won
+                        is_winner = (outcome.upper() == winning_outcome.upper())
+                        
+                        if is_winner:
+                            # Winning position: payout based on resolved_price/entry_price ratio
+                            if entry_price > 0:
+                                payout = size * (resolved_price / entry_price)
+                            else:
+                                payout = size * resolved_price
+                            pnl = payout - cost_basis
+                        else:
+                            # Losing position: pays $0 (full loss)
+                            payout = 0.0
+                            pnl = -cost_basis
+                        
+                        resolution_pnl += pnl
+                        
+                        # Add to resolved_trades
+                        resolved_trades.append({
+                            "market_id": market_id,
+                            "token_id": token_id,
+                            "outcome": outcome,
+                            "winning_outcome": winning_outcome,
+                            "size": size,
+                            "entry_price": entry_price,
+                            "resolved_price": resolved_price,
+                            "cost_basis": cost_basis,
+                            "payout": payout,
+                            "realized_pnl": pnl,
+                            "resolved_at": resolution_ts,
+                            "title": title,
+                            "coin_name": pos.get("coin_name", "Unknown")
+                        })
+                    
+                        resolved_market_ids.add(market_id)
+                        resolved_count += 1
+                        if positions:
+                            recent_resolutions = resolved_trades[-len(positions):]
+                            market_resolution_pnl = sum(t.get('realized_pnl', 0.0) for t in recent_resolutions)
+                            logger.info(f"✅ [{checked_count}/{len(markets_to_check)}] Market {market_id} ({title[:50]}...): Resolved {winning_outcome} @ {int(resolved_price*100)}¢, {len(positions)} positions, PnL: ${market_resolution_pnl:.2f}")
+                        else:
+                            logger.info(f"✅ [{checked_count}/{len(markets_to_check)}] Market {market_id} ({title[:50]}...): Resolved {winning_outcome} @ {int(resolved_price*100)}¢ (no open positions at end of hour)")
+                        
+                        # Update progress every 10 markets
+                        if checked_count % 10 == 0:
+                            try:
+                                if processing_msg:
+                                    await processing_msg.edit_text(f"⏳ Step 3/5: Checked {checked_count}/{len(markets_to_check)} markets, found {resolved_count} resolved...", parse_mode='Markdown')
+                            except:
+                                pass
+                except Exception as e:
+                    logger.error(f"❌ Error processing market {market_id}: {e}", exc_info=True)
+                    continue  # Continue with next market if this one fails
+            
+            logger.info(f"✅ Finished checking markets: {resolved_count} resolved out of {checked_count} checked")
+            
+            # Update progress message
+            try:
+                if processing_msg:
+                    await processing_msg.edit_text("⏳ Step 4/5: Calculating unrealized PnL...", parse_mode='Markdown')
+            except:
+                pass
+            
+            logger.info("📊 Step 4/5: Starting unrealized PnL calculation...")
+            logger.info(f"📊 Positions at hour end: {len(positions_at_hour_end)}, Resolved markets: {len(resolved_market_ids)}")
+            
+            # Filter positions that existed at end of previous hour AND weren't resolved
+            unresolved_positions_at_hour_end = {}
+            for token_id, pos in positions_at_hour_end.items():
+                market_id = pos.get("market_id", "")
+                # Position existed at end of hour AND market didn't resolve during this hour
+                if market_id not in resolved_market_ids:
+                    unresolved_positions_at_hour_end[token_id] = pos
+            
+            logger.info(f"📊 Unresolved positions: {len(unresolved_positions_at_hour_end)}")
+            
+            total_unrealized = 0.0
+            open_positions_detail = []
+            
+            if unresolved_positions_at_hour_end:
+                logger.info(f"📊 Fetching prices for {len(unresolved_positions_at_hour_end)} unresolved positions...")
+                # Fetch current prices for these positions (at end of hour, not current time)
+                # For historical accuracy, we should use prices at end_timestamp, but since we can't
+                # fetch historical prices, we use current prices as an approximation
+                # Note: If markets resolved, those positions are already counted in resolution_pnl
+                token_ids = list(unresolved_positions_at_hour_end.keys())
+                logger.info(f"📊 Token IDs to fetch prices for: {len(token_ids)}")
+                
+                try:
+                    from polymarket_copy_bot import get_market_prices
+                    logger.info("📊 Calling get_market_prices...")
+                    all_prices = get_market_prices(token_ids)
+                    logger.info(f"📊 Received prices for {len(all_prices)} tokens")
+                    
+                    # Calculate unrealized PnL
+                    current_prices = {}
+                    for token_id in token_ids:
+                        if token_id in all_prices:
+                            prices = all_prices[token_id]
+                            buy_price = prices.get("BUY", 0.0)
+                            sell_price = prices.get("SELL", 0.0)
+                            current_price = buy_price if buy_price > 0 else sell_price
+                            if current_price > 0:
+                                current_prices[token_id] = current_price
+                    
+                    logger.info(f"📊 Valid prices found: {len(current_prices)}/{len(token_ids)}")
+                    
+                    if current_prices:
+                        logger.info("📊 Calculating unrealized PnL using tracker...")
+                        # Only calculate unrealized for positions that weren't resolved
+                        pnl_data = tracker.calculate_unrealized_pnl(current_prices)
+                        logger.info(f"📊 PnL data received: {len(pnl_data.get('positions', []))} positions")
+                        # Filter out positions from resolved markets (double-check)
+                        filtered_positions = [
+                            pos for pos in pnl_data["positions"]
+                            if pos.get("market_id", "") not in resolved_market_ids
+                        ]
+                        total_unrealized = sum(pos["unrealized_pnl"] for pos in filtered_positions)
+                        open_positions_detail = filtered_positions
+                        logger.info(f"📊 Final unrealized PnL: ${total_unrealized:.2f}, {len(open_positions_detail)} positions")
+                except Exception as e:
+                    logger.error(f"❌ Error calculating unrealized PnL: {e}", exc_info=True)
+                    total_unrealized = 0.0
+                    open_positions_detail = []
+            else:
+                logger.info("📊 No unresolved positions, skipping unrealized PnL calculation")
+            
+            logger.info("📊 Step 4/5 completed, moving to Step 5/5...")
+            
+            # Update progress message
+            logger.info("📊 About to update progress message to Step 5/5...")
+            try:
+                if processing_msg:
+                    logger.info("📊 Calling edit_text for Step 5/5...")
+                    await processing_msg.edit_text("⏳ Step 5/5: Building report...", parse_mode='Markdown')
+                    logger.info("📊 edit_text completed successfully")
+                else:
+                    logger.warning("📊 No processing_msg available, skipping edit")
+            except Exception as e:
+                logger.error(f"❌ Error updating progress message: {e}", exc_info=True)
+            
+            logger.info("📊 Step 5/5: Starting report building...")
+            logger.info(f"📊 PnL values: trading={trading_profit:.2f}, hedging={hedging_profit:.2f}, closing={closing_profit:.2f}, resolution={resolution_pnl:.2f}, unrealized={total_unrealized:.2f}")
+            
+            # Calculate totals
+            total_closed = trading_profit + hedging_profit + closing_profit + resolution_pnl
+            total_pnl = total_closed + total_unrealized
+            
+            logger.info(f"📊 Totals calculated: total_closed={total_closed:.2f}, total_pnl={total_pnl:.2f}")
+            
+            # Build detailed message
+            hour_str = hour_start.strftime("%I:%M %p")
+            hour_end_str = hour_end.strftime("%I:%M %p")
+            
+            logger.info("📊 Building message header...")
+            lines = [
+                f"💰 *Full PnL Breakdown - Previous Hour*\n",
+                f"⏰ {hour_str} - {hour_end_str}\n",
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            ]
+            logger.info(f"📊 Header lines added: {len(lines)} lines")
+            
+            # 1. Trading Profits Breakdown
+            logger.info(f"📊 Building trading profits section: {len(trading_trades)} trades")
+            lines.append(f"📈 *Trading Profits* ({len(trading_trades)} trades):\n")
+            if trading_trades:
+                for idx, trade in enumerate(trading_trades[:10], 1):  # Show first 10
                     outcome = trade.get("outcome", "Unknown")
                     size = trade.get("size", 0.0)
                     entry_price = trade.get("entry_price", 0.0)
                     exit_price = trade.get("exit_price", 0.0)
                     pnl = trade.get("realized_pnl", 0.0)
+                    close_type = trade.get("type", "CLOSE")
                     
                     pnl_emoji = "✅" if pnl >= 0 else "❌"
                     pnl_sign = "+" if pnl >= 0 else ""
                     entry_cents = int(entry_price * 100) if entry_price > 0 else 0
                     exit_cents = int(exit_price * 100) if exit_price > 0 else 0
                     
-                    lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                    lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
                 
-                if len(closing_trades) > 10:
-                    lines.append(f"   ... and {len(closing_trades) - 10} more closes")
+                if len(trading_trades) > 10:
+                    lines.append(f"   ... and {len(trading_trades) - 10} more trades")
             else:
-                lines.append("   No closing trades")
+                lines.append("   No trading trades")
+        
+            trading_emoji = "✅" if trading_profit >= 0 else "❌"
+            trading_sign = "+" if trading_profit >= 0 else ""
+            lines.append(f"\n   💰 *Subtotal:* {trading_emoji} {trading_sign}${trading_profit:.2f}\n")
+        
+            # 2. Hedging Profits Breakdown
+            logger.info(f"📊 Building hedging profits section: {len(hedging_trades)} hedges")
+            lines.append(f"🔄 *Hedging Profits* ({len(hedging_trades)} hedges):\n")
+            if hedging_trades:
+                for idx, trade in enumerate(hedging_trades[:10], 1):  # Show first 10
+                    outcome = trade.get("outcome", "Unknown")
+                    size = trade.get("size", 0.0)
+                    entry_price = trade.get("entry_price", 0.0)
+                    exit_price = trade.get("exit_price", 0.0)
+                    pnl = trade.get("realized_pnl", 0.0)
+                    close_type = trade.get("type", "HEDGE")
+                    
+                    pnl_emoji = "✅" if pnl >= 0 else "❌"
+                    pnl_sign = "+" if pnl >= 0 else ""
+                    entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                    exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                    
+                    # Parse outcome to show both sides if it's a hedge
+                    if "→" in outcome:
+                        parts = outcome.split("→")
+                        lines.append(f"   {idx}. {close_type}: {size:.1f} {parts[0].strip()}→{parts[1].strip()} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                    else:
+                        lines.append(f"   {idx}. {close_type}: {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                
+                if len(hedging_trades) > 10:
+                    lines.append(f"   ... and {len(hedging_trades) - 10} more hedges")
+            else:
+                lines.append("   No hedging trades")
+        
+            hedging_emoji = "✅" if hedging_profit >= 0 else "❌"
+            hedging_sign = "+" if hedging_profit >= 0 else ""
+            lines.append(f"\n   💰 *Subtotal:* {hedging_emoji} {hedging_sign}${hedging_profit:.2f}\n")
+        
+        # Initialize signs for optional sections
+            closing_sign = "+" if closing_profit >= 0 else ""
+            resolution_sign = "+" if resolution_pnl >= 0 else ""
+        
+        # 3. Closing Profits Breakdown (if any)
+            if closing_profit != 0 or closing_trades:
+                lines.append(f"📉 *Closing Profits* ({len(closing_trades)} closes):\n")
+                if closing_trades:
+                    for idx, trade in enumerate(closing_trades[:10], 1):
+                        outcome = trade.get("outcome", "Unknown")
+                        size = trade.get("size", 0.0)
+                        entry_price = trade.get("entry_price", 0.0)
+                        exit_price = trade.get("exit_price", 0.0)
+                        pnl = trade.get("realized_pnl", 0.0)
+                        
+                        pnl_emoji = "✅" if pnl >= 0 else "❌"
+                        pnl_sign = "+" if pnl >= 0 else ""
+                        entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                        exit_cents = int(exit_price * 100) if exit_price > 0 else 0
+                        
+                        lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{exit_cents}¢ = {pnl_sign}${pnl:.2f}")
+                    
+                    if len(closing_trades) > 10:
+                        lines.append(f"   ... and {len(closing_trades) - 10} more closes")
+                else:
+                    lines.append("   No closing trades")
             
             closing_emoji = "✅" if closing_profit >= 0 else "❌"
             closing_sign = "+" if closing_profit >= 0 else ""
             lines.append(f"\n   💰 *Subtotal:* {closing_emoji} {closing_sign}${closing_profit:.2f}\n")
         
         # 4. Resolved Positions (if any)
-        if resolution_pnl != 0 or resolved_trades:
-            lines.append(f"🎯 *Resolved Markets* ({len(resolved_trades)} resolutions):\n")
-            if resolved_trades:
-                for idx, trade in enumerate(resolved_trades[:10], 1):
-                    outcome = trade.get("outcome", "Unknown")
-                    size = trade.get("size", 0.0)
-                    entry_price = trade.get("entry_price", 0.0)
-                    resolved_price = trade.get("resolved_price", 0.0)
-                    pnl = trade.get("realized_pnl", 0.0)
+            logger.info(f"📊 Building resolved markets section: {len(resolved_trades)} resolutions, pnl={resolution_pnl:.2f}")
+            if resolution_pnl != 0 or resolved_trades:
+                lines.append(f"🎯 *Resolved Markets* ({len(resolved_trades)} resolutions):\n")
+                if resolved_trades:
+                    for idx, trade in enumerate(resolved_trades[:10], 1):
+                        outcome = trade.get("outcome", "Unknown")
+                        size = trade.get("size", 0.0)
+                        entry_price = trade.get("entry_price", 0.0)
+                        resolved_price = trade.get("resolved_price", 0.0)
+                        pnl = trade.get("realized_pnl", 0.0)
+                        
+                        pnl_emoji = "✅" if pnl >= 0 else "❌"
+                        pnl_sign = "+" if pnl >= 0 else ""
+                        entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                        resolved_cents = int(resolved_price * 100) if resolved_price > 0 else 0
+                        
+                        lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{resolved_cents}¢ = {pnl_sign}${pnl:.2f}")
                     
-                    pnl_emoji = "✅" if pnl >= 0 else "❌"
-                    pnl_sign = "+" if pnl >= 0 else ""
-                    entry_cents = int(entry_price * 100) if entry_price > 0 else 0
-                    resolved_cents = int(resolved_price * 100) if resolved_price > 0 else 0
-                    
-                    lines.append(f"   {idx}. {size:.1f} {outcome} @ {entry_cents}¢→{resolved_cents}¢ = {pnl_sign}${pnl:.2f}")
-                
-                if len(resolved_trades) > 10:
-                    lines.append(f"   ... and {len(resolved_trades) - 10} more resolutions")
-            else:
-                lines.append("   No resolved markets")
+                    if len(resolved_trades) > 10:
+                        lines.append(f"   ... and {len(resolved_trades) - 10} more resolutions")
+                else:
+                    lines.append("   No resolved markets")
             
             resolution_emoji = "✅" if resolution_pnl >= 0 else "❌"
             resolution_sign = "+" if resolution_pnl >= 0 else ""
             lines.append(f"\n   💰 *Subtotal:* {resolution_emoji} {resolution_sign}${resolution_pnl:.2f}\n")
         
-        # 5. Summary of Closed Trades
-        lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-        lines.append(f"📊 *Closed Trades Summary:*\n")
-        lines.append(f"   📈 Trading: {trading_sign}${trading_profit:.2f}\n")
-        lines.append(f"   🔄 Hedging: {hedging_sign}${hedging_profit:.2f}\n")
-        if closing_profit != 0:
-            lines.append(f"   📉 Closing: {closing_sign}${closing_profit:.2f}\n")
-        if resolution_pnl != 0:
-            lines.append(f"   🎯 Resolved: {resolution_sign}${resolution_pnl:.2f}\n")
+            # 5. Summary of Closed Trades
+            logger.info("📊 Building closed trades summary section...")
+            lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            lines.append(f"📊 *Closed Trades Summary:*\n")
+            lines.append(f"   📈 Trading: {trading_sign}${trading_profit:.2f}\n")
+            lines.append(f"   🔄 Hedging: {hedging_sign}${hedging_profit:.2f}\n")
+            if closing_profit != 0:
+                lines.append(f"   📉 Closing: {closing_sign}${closing_profit:.2f}\n")
+            if resolution_pnl != 0:
+                lines.append(f"   🎯 Resolved: {resolution_sign}${resolution_pnl:.2f}\n")
         
-        total_closed_emoji = "✅" if total_closed >= 0 else "❌"
-        total_closed_sign = "+" if total_closed >= 0 else ""
-        lines.append(f"   ━━━━━━━━━━━━━━━━━━━━\n")
-        lines.append(f"   💰 *Total Closed:* {total_closed_emoji} {total_closed_sign}${total_closed:.2f}\n\n")
+            total_closed_emoji = "✅" if total_closed >= 0 else "❌"
+            total_closed_sign = "+" if total_closed >= 0 else ""
+            lines.append(f"   ━━━━━━━━━━━━━━━━━━━━\n")
+            lines.append(f"   💰 *Total Closed:* {total_closed_emoji} {total_closed_sign}${total_closed:.2f}\n\n")
         
-        # 6. Open Positions (Unrealized)
-        lines.append(f"🎲 *Open Positions (Unrealized)* ({len(open_positions_detail)} positions):\n")
-        if open_positions_detail:
-            sorted_positions = sorted(open_positions_detail, key=lambda x: abs(x["unrealized_pnl"]), reverse=True)
-            for idx, pos in enumerate(sorted_positions[:10], 1):  # Show top 10
-                coin = pos["coin_name"]
-                outcome = pos["outcome"]
-                size = pos["size"]
-                entry_price = pos["entry_price"]
-                current_price = pos["current_price"]
-                unrealized = pos["unrealized_pnl"]
+            # 6. Open Positions (Unrealized)
+            logger.info(f"📊 Building open positions section: {len(open_positions_detail)} positions")
+            lines.append(f"🎲 *Open Positions (Unrealized)* ({len(open_positions_detail)} positions):\n")
+            if open_positions_detail:
+                logger.info(f"📊 Sorting {len(open_positions_detail)} positions by unrealized PnL...")
+                sorted_positions = sorted(open_positions_detail, key=lambda x: abs(x["unrealized_pnl"]), reverse=True)
+                logger.info(f"📊 Processing {min(10, len(sorted_positions))} top positions...")
+                for idx, pos in enumerate(sorted_positions[:10], 1):  # Show top 10
+                    coin = pos["coin_name"]
+                    outcome = pos["outcome"]
+                    size = pos["size"]
+                    entry_price = pos["entry_price"]
+                    current_price = pos["current_price"]
+                    unrealized = pos["unrealized_pnl"]
+                    
+                    pos_emoji = "✅" if unrealized >= 0 else "❌"
+                    pos_sign = "+" if unrealized >= 0 else ""
+                    direction = "🟢" if size > 0 else "🔴"
+                    entry_cents = int(entry_price * 100) if entry_price > 0 else 0
+                    current_cents = int(current_price * 100) if current_price > 0 else 0
+                    
+                    lines.append(f"   {idx}. {coin} {outcome}: {direction} {abs(size):.1f} @ {entry_cents}¢→{current_cents}¢ = {pos_sign}${unrealized:.2f}")
                 
-                pos_emoji = "✅" if unrealized >= 0 else "❌"
-                pos_sign = "+" if unrealized >= 0 else ""
-                direction = "🟢" if size > 0 else "🔴"
-                entry_cents = int(entry_price * 100) if entry_price > 0 else 0
-                current_cents = int(current_price * 100) if current_price > 0 else 0
-                
-                lines.append(f"   {idx}. {coin} {outcome}: {direction} {abs(size):.1f} @ {entry_cents}¢→{current_cents}¢ = {pos_sign}${unrealized:.2f}")
-            
-            if len(sorted_positions) > 10:
-                lines.append(f"   ... and {len(sorted_positions) - 10} more positions")
-        else:
-            lines.append("   No open positions")
+                if len(sorted_positions) > 10:
+                    lines.append(f"   ... and {len(sorted_positions) - 10} more positions")
+            else:
+                lines.append("   No open positions")
         
-        unrealized_emoji = "✅" if total_unrealized >= 0 else "❌"
-        unrealized_sign = "+" if total_unrealized >= 0 else ""
-        lines.append(f"\n   💰 *Subtotal:* {unrealized_emoji} {unrealized_sign}${total_unrealized:.2f}\n")
+            unrealized_emoji = "✅" if total_unrealized >= 0 else "❌"
+            unrealized_sign = "+" if total_unrealized >= 0 else ""
+            lines.append(f"\n   💰 *Subtotal:* {unrealized_emoji} {unrealized_sign}${total_unrealized:.2f}\n")
         
         # 7. Final Total
-        lines.append(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-        total_emoji = "✅" if total_pnl >= 0 else "❌"
-        total_sign = "+" if total_pnl >= 0 else ""
-        lines.append(f"💰 *Final Total PnL:* {total_emoji} {total_sign}${total_pnl:.2f}\n")
-        lines.append(f"   = Closed ({total_closed_sign}${total_closed:.2f}) + Unrealized ({unrealized_sign}${total_unrealized:.2f})")
+            logger.info("📊 Building final total section...")
+            lines.append(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            total_emoji = "✅" if total_pnl >= 0 else "❌"
+            total_sign = "+" if total_pnl >= 0 else ""
+            lines.append(f"💰 *Final Total PnL:* {total_emoji} {total_sign}${total_pnl:.2f}\n")
+            lines.append(f"   = Closed ({total_closed_sign}${total_closed:.2f}) + Unrealized ({unrealized_sign}${total_unrealized:.2f})")
         
-        message = "\n".join(lines)
+            logger.info(f"📊 Joining {len(lines)} lines into message...")
+            message = "\n".join(lines)
+            logger.info(f"📊 Message length: {len(message)} characters")
         
-        # Split message if too long (Telegram limit is 4096 chars)
-        if len(message) > 4000:
-            # Split into parts
-            parts = []
-            current_part = []
-            current_length = 0
-            
-            for line in lines:
-                line_length = len(line) + 1  # +1 for newline
-                if current_length + line_length > 4000:
-                    if current_part:
-                        parts.append("\n".join(current_part))
-                    current_part = [line]
-                    current_length = line_length
-                else:
-                    current_part.append(line)
-                    current_length += line_length
-            
-            if current_part:
-                parts.append("\n".join(current_part))
-            
-            for part in parts:
+            # Split message if too long (Telegram limit is 4096 chars)
+            logger.info(f"📊 Checking if message needs splitting (limit: 4000 chars)...")
+            if len(message) > 4000:
+                logger.info(f"📊 Message is too long, splitting into parts...")
+                # Split into parts
+                parts = []
+                current_part = []
+                current_length = 0
+                
+                for line in lines:
+                    line_length = len(line) + 1  # +1 for newline
+                    if current_length + line_length > 4000:
+                        if current_part:
+                            parts.append("\n".join(current_part))
+                        current_part = [line]
+                        current_length = line_length
+                    else:
+                        current_part.append(line)
+                        current_length += line_length
+                
+                if current_part:
+                    parts.append("\n".join(current_part))
+                
+                logger.info(f"📊 Sending {len(parts)} message parts...")
+                for idx, part in enumerate(parts, 1):
+                    logger.info(f"📊 Sending part {idx}/{len(parts)} (length: {len(part)} chars)...")
+                    if update.message:
+                        await update.message.reply_text(part, parse_mode='Markdown')
+                    logger.info(f"📊 Part {idx}/{len(parts)} sent successfully")
+            else:
+                logger.info("📊 Sending single message (not split)...")
                 if update.message:
-                    await update.message.reply_text(part, parse_mode='Markdown')
-        else:
+                    await update.message.reply_text(message, parse_mode='Markdown')
+                logger.info("📊 Single message sent successfully")
+            
+            # Delete processing message if it exists
+            logger.info("📊 Deleting processing message...")
+            try:
+                if processing_msg:
+                    await processing_msg.delete()
+                    logger.info("📊 Processing message deleted successfully")
+            except Exception as e:
+                logger.warning(f"📊 Failed to delete processing message: {e}")
+            
+            logger.info("✅ Report building and sending completed successfully!")
+        except Exception as e:
+            logger.error(f"Error in /fullpnl1hour: {e}", exc_info=True)
+            error_msg = f"❌ Error calculating PnL breakdown: {str(e)}\n\nPlease try again or check logs."
             if update.message:
-                await update.message.reply_text(message, parse_mode='Markdown')
+                try:
+                    await update.message.reply_text(error_msg, parse_mode='Markdown')
+                    # Try to delete processing message
+                    if processing_msg:
+                        try:
+                            await processing_msg.delete()
+                        except:
+                            pass
+                except:
+                    pass
     
     async def _handle_money(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /money command - show volume and max trade for current hour."""
@@ -2637,26 +3066,55 @@ class TelegramNotifier:
                             up_token = market_tokens.get("UP") or market_tokens.get("Up")
                             down_token = market_tokens.get("DOWN") or market_tokens.get("Down")
                             
-                            token_ids_to_fetch = []
-                            if up_token:
-                                token_ids_to_fetch.append(up_token)
-                            if down_token:
-                                token_ids_to_fetch.append(down_token)
+                            # Try to load saved prices from snapshot first (for the hour that just ended)
+                            up_price = None
+                            down_price = None
+                            hour_key = hour_end.strftime("%Y-%m-%d-%H")
+                            price_snapshot_file = Path("price_snapshots.json")
+                            saved_prices_found = False
                             
-                            if token_ids_to_fetch:
-                                all_prices = get_market_prices(token_ids_to_fetch)
+                            if price_snapshot_file.exists():
+                                try:
+                                    with open(price_snapshot_file, 'r') as f:
+                                        snapshots = json.load(f)
+                                    
+                                    if hour_key in snapshots:
+                                        snapshot = snapshots[hour_key]
+                                        snapshot_prices = snapshot.get("prices", {})
+                                        
+                                        if up_token and up_token in snapshot_prices:
+                                            up_price = snapshot_prices[up_token].get("current", 0.0)
+                                            saved_prices_found = True
+                                        
+                                        if down_token and down_token in snapshot_prices:
+                                            down_price = snapshot_prices[down_token].get("current", 0.0)
+                                            saved_prices_found = True
+                                        
+                                        if saved_prices_found:
+                                            logger.info(f"💾 Using saved prices from snapshot {hour_key} for resolved market {market_id}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️  Failed to load price snapshot: {e}")
+                            
+                            # Fallback to live prices if snapshot not available
+                            if not saved_prices_found:
+                                token_ids_to_fetch = []
+                                if up_token:
+                                    token_ids_to_fetch.append(up_token)
+                                if down_token:
+                                    token_ids_to_fetch.append(down_token)
                                 
-                                # Get resolved prices
-                                up_price = None
-                                down_price = None
-                                
-                                if up_token and up_token in all_prices:
-                                    up_prices = all_prices[up_token]
-                                    up_price = up_prices.get("BUY", 0.0) or up_prices.get("SELL", 0.0)
-                                
-                                if down_token and down_token in all_prices:
-                                    down_prices = all_prices[down_token]
-                                    down_price = down_prices.get("BUY", 0.0) or down_prices.get("SELL", 0.0)
+                                if token_ids_to_fetch:
+                                    all_prices = get_market_prices(token_ids_to_fetch)
+                                    
+                                    if up_token and up_token in all_prices:
+                                        up_prices = all_prices[up_token]
+                                        up_price = up_prices.get("BUY", 0.0) or up_prices.get("SELL", 0.0)
+                                    
+                                    if down_token and down_token in all_prices:
+                                        down_prices = all_prices[down_token]
+                                        down_price = down_prices.get("BUY", 0.0) or down_prices.get("SELL", 0.0)
+                                    
+                                    logger.info(f"📡 Using live prices (snapshot not available) for resolved market {market_id}")
                                 
                                 # Determine winning outcome: highest price wins (closest to 1.0)
                                 winning_outcome = None
@@ -2805,6 +3263,123 @@ class TelegramNotifier:
             except Exception as e:
                 logger.warning(f"Failed to calculate end-of-hour PnL for chat {chat_id}: {e}", exc_info=True)
                 self.active_chats.discard(chat_id)
+    
+    async def _save_hourly_price_snapshot(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Save live prices for all open positions at :59:59 every hour.
+        This allows us to calculate PnL for resolved markets using historical prices."""
+        if not self.enabled:
+            return
+        
+        logger.info("💾 Saving hourly price snapshot at :59:59...")
+        
+        now = datetime.now()
+        timestamp = int(now.timestamp())
+        hour_key = now.strftime("%Y-%m-%d-%H")  # e.g., "2025-12-03-14"
+        
+        # Price snapshot file: stores prices by hour
+        price_snapshot_file = Path("price_snapshots.json")
+        
+        try:
+            # Load existing snapshots
+            if price_snapshot_file.exists():
+                with open(price_snapshot_file, 'r') as f:
+                    snapshots = json.load(f)
+            else:
+                snapshots = {}
+            
+            # Get all active users and collect all open positions
+            with self._lock:
+                active_chats_copy = list(self.active_chats)
+            
+            all_token_ids = set()
+            market_token_map = {}  # market_id -> {token_ids, titles}
+            
+            for chat_id in active_chats_copy:
+                try:
+                    tracker = self.get_user_tracker(chat_id)
+                    with tracker._lock:
+                        open_positions = tracker.open_positions.copy()
+                    
+                    for token_id, pos in open_positions.items():
+                        all_token_ids.add(token_id)
+                        market_id = pos.get("market_id", "")
+                        if market_id:
+                            if market_id not in market_token_map:
+                                market_token_map[market_id] = {
+                                    "token_ids": set(),
+                                    "titles": set()
+                                }
+                            market_token_map[market_id]["token_ids"].add(token_id)
+                            title = pos.get("title", "")
+                            if title:
+                                market_token_map[market_id]["titles"].add(title)
+                except Exception as e:
+                    logger.warning(f"Failed to get positions for chat {chat_id}: {e}")
+                    continue
+            
+            if not all_token_ids:
+                logger.info("💾 No open positions to save prices for")
+                return
+            
+            # Fetch prices for all tokens
+            from polymarket_copy_bot import get_market_prices
+            logger.info(f"💾 Fetching prices for {len(all_token_ids)} tokens...")
+            
+            all_prices = get_market_prices(list(all_token_ids))
+            
+            if not all_prices:
+                logger.warning("💾 Failed to fetch prices for snapshot")
+                return
+            
+            # Build snapshot data
+            snapshot_data = {
+                "timestamp": timestamp,
+                "hour_key": hour_key,
+                "datetime": now.isoformat(),
+                "prices": {},
+                "markets": {}
+            }
+            
+            # Store prices by token_id
+            for token_id, prices in all_prices.items():
+                buy_price = prices.get("BUY", 0.0)
+                sell_price = prices.get("SELL", 0.0)
+                # Use buy price if available, otherwise sell price
+                current_price = buy_price if buy_price > 0 else sell_price
+                if current_price > 0:
+                    snapshot_data["prices"][token_id] = {
+                        "buy": buy_price,
+                        "sell": sell_price,
+                        "current": current_price
+                    }
+            
+            # Store market info (for easier lookup later)
+            for market_id, info in market_token_map.items():
+                titles = list(info["titles"])
+                snapshot_data["markets"][market_id] = {
+                    "token_ids": list(info["token_ids"]),
+                    "title": titles[0] if titles else ""
+                }
+            
+            # Save snapshot
+            snapshots[hour_key] = snapshot_data
+            
+            # Keep only last 7 days of snapshots (168 hours) to avoid file bloat
+            cutoff_time = now - timedelta(days=7)
+            snapshots_to_keep = {}
+            for key, data in snapshots.items():
+                snapshot_time = datetime.fromisoformat(data.get("datetime", ""))
+                if snapshot_time >= cutoff_time:
+                    snapshots_to_keep[key] = data
+            
+            # Save to file
+            with open(price_snapshot_file, 'w') as f:
+                json.dump(snapshots_to_keep, f, indent=2)
+            
+            logger.info(f"💾 Saved price snapshot for {hour_key}: {len(snapshot_data['prices'])} tokens, {len(snapshot_data['markets'])} markets")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to save price snapshot: {e}", exc_info=True)
     
     async def _handle_backfill(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /backfill command - reset current hour's data and refresh with accurate trades."""
@@ -3008,9 +3583,28 @@ class TelegramNotifier:
                     logger.info(f"📊 Trade {idx + 1}/{len(trades)}: {trade.outcome} {trade.side} "
                               f"{trade.size:.2f} @ ${trade.price:.4f} (tx: {trade.transaction_hash[:16]}...)")
                     
+                    # Store ALL trades in trade_history (even filtered ones) for complete tracking
+                    with tracker._lock:
+                        trade_record = {
+                            "timestamp": trade.timestamp or int(time.time()),
+                            "transaction_hash": trade.transaction_hash,
+                            "market_id": trade.market_id,
+                            "token_id": trade.token_id,
+                            "outcome": trade.outcome,
+                            "side": trade.side,
+                            "size": trade.size,
+                            "price": trade.price,
+                            "title": trade.title,
+                            "my_size": 0.0,  # Will be set if trade is copied
+                            "my_usdc_value": 0.0,
+                            "copied": False  # Will be set to True if trade is copied
+                        }
+                        tracker.trade_history.append(trade_record)
+                        logger.debug(f"📝 Stored trade {idx + 1} in trade_history (copied=False)")
+                    
                     # Check if we should copy this trade
                     if not should_copy_trade(trade):
-                        logger.info(f"⚠️  Trade {idx + 1} filtered out by should_copy_trade - NOT copying")
+                        logger.info(f"⚠️  Trade {idx + 1} filtered out by should_copy_trade - NOT copying (but stored in history)")
                         skipped_count += 1
                         continue
                     
@@ -3021,7 +3615,20 @@ class TelegramNotifier:
                     if my_size <= 0:
                         logger.debug(f"Trade {idx + 1} skipped: my_size <= 0")
                         skipped_count += 1
+                        # Update trade record to reflect it was skipped
+                        with tracker._lock:
+                            if tracker.trade_history:
+                                tracker.trade_history[-1]["my_size"] = 0.0
+                                tracker.trade_history[-1]["copied"] = False
                         continue
+                    
+                    # Update trade record to mark as copied
+                    with tracker._lock:
+                        if tracker.trade_history:
+                            tracker.trade_history[-1]["my_size"] = my_size
+                            tracker.trade_history[-1]["my_usdc_value"] = my_size * trade.price
+                            tracker.trade_history[-1]["copied"] = True
+                            logger.debug(f"📝 Updated trade {idx + 1} in trade_history (copied=True, my_size={my_size:.2f})")
                     
                     # Apply trade to user's tracker (simulate, don't place real orders)
                     # This will automatically handle hedging when opposite positions are detected
@@ -3450,13 +4057,13 @@ class TelegramNotifier:
                             resolved_price = down_price
                         else:
                             # Equal prices - default to Up
-                                winning_outcome = "Up"
+                            winning_outcome = "Up"
                             resolved_price = up_price
                         
-                        up_price_cents = int(up_price * 100)
-                        down_price_cents = int(down_price * 100)
-                        winner_price_cents = int(resolved_price * 100)
-                        loser_price_cents = int((down_price if winning_outcome == "Up" else up_price) * 100)
+                        up_price_cents = int(up_price * 100) if up_price else 0
+                        down_price_cents = int(down_price * 100) if down_price else 0
+                        winner_price_cents = int(resolved_price * 100) if resolved_price else 0
+                        loser_price_cents = int((down_price if winning_outcome == "Up" else up_price) * 100) if (down_price if winning_outcome == "Up" else up_price) else 0
                         
                         market_log_entry["final_prices"] = {
                             "up_price": up_price,
@@ -6189,7 +6796,7 @@ def print_banner(
         for i, wallet in enumerate(TARGET_WALLETS, 1):
             logger.info(f"    {i}. {wallet}")
     else:
-    logger.info(f"  Target Wallet: {target_wallet}")
+        logger.info(f"  Target Wallet: {target_wallet}")
     if ALLOWED_MARKET_IDS:
         logger.info(f"  Allowed Markets: {len(ALLOWED_MARKET_IDS)} market ID(s)")
     else:
