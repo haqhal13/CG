@@ -2240,3 +2240,78 @@ telegram.error.Conflict: Conflict: terminated by other getUpdates request; make 
 2025-12-03 16:42:10,387 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
 2025-12-03 16:42:10,388 - INFO - Fetching trades from Polymarket API (attempt 1/3)
 2025-12-03 16:42:10,420 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:12,426 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:12,460 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:12,460 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:12,487 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:14,492 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:14,526 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:14,527 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:14,553 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:16,558 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:16,602 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:16,602 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:16,632 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:18,636 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:18,667 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:18,667 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:18,709 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:20,714 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:20,745 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:20,746 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:20,772 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:22,777 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:22,820 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:22,820 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:22,852 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:24,858 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:24,892 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:24,893 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:24,920 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:26,926 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:26,966 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:26,966 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:26,998 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:27,268 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 200 OK"
+2025-12-03 16:42:28,742 - INFO - HTTP Request: POST https://api.telegram.org/bot8236934064:AAEcPDDIilSw9W4-TzO26Abefe27dDRxDpQ/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-03 16:42:28,744 - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/_bot.py", line 732, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/request/_baserequest.py", line 198, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/haq/CG/venv/lib/python3.11/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-03 16:42:29,003 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:29,047 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:29,048 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:29,086 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:31,092 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:31,129 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:31,129 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:31,155 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:33,161 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:33,205 - INFO - API returned 100 activities, filtering for trades after timestamp 1764779777
+2025-12-03 16:42:33,206 - INFO - Fetching trades from Polymarket API (attempt 1/3)
+2025-12-03 16:42:33,234 - INFO - API returned 0 activities, filtering for trades after timestamp 1764779777
